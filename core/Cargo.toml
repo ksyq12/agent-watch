@@ -1,0 +1,22 @@
+[package]
+name = "macagentwatch-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core library for MacAgentWatch - AI agent monitoring"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+portable-pty.workspace = true
+libproc.workspace = true
+colored.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio.workspace = true
+tempfile.workspace = true

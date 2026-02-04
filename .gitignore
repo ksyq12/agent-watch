@@ -1,0 +1,33 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Cargo lock file (optional - uncomment if this is a library)
+# Cargo.lock
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Debug and log files
+*.log
+debug/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Project docs (local only)
+PRD.md
+todo.md
