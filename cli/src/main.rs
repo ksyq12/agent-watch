@@ -6,8 +6,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use macagentwatch_core::{
-    LogFormat, LoggerConfig, ProcessWrapper, RiskLevel, RiskScorer, WrapperConfig,
+    Config, LogFormat, LoggerConfig, NetworkWhitelist, ProcessWrapper, RiskLevel, RiskScorer,
+    WrapperConfig,
 };
+use std::path::PathBuf;
 
 /// MacAgentWatch - AI Agent Monitoring Tool
 #[derive(Parser)]
@@ -46,6 +48,22 @@ struct Cli {
     /// Polling interval for child process tracking (milliseconds)
     #[arg(long, default_value = "100")]
     tracking_poll_ms: u64,
+
+    /// Enable file system monitoring
+    #[arg(long)]
+    enable_fswatch: bool,
+
+    /// Enable network monitoring
+    #[arg(long)]
+    enable_netmon: bool,
+
+    /// Directory to save session logs
+    #[arg(long)]
+    log_dir: Option<PathBuf>,
+
+    /// Configuration file path
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -256,6 +274,13 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     let command = cli.cmd.first().context("No command specified")?;
     let args: Vec<String> = cli.cmd.iter().skip(1).cloned().collect();
 
+    // Load config file if specified or use default
+    let app_config = if let Some(ref path) = cli.config {
+        Config::load_from_path(path).unwrap_or_default()
+    } else {
+        Config::load().unwrap_or_default()
+    };
+
     // Build logger config
     let logger_config = LoggerConfig {
         format: cli.format.into(),
@@ -264,12 +289,37 @@ fn run_wrapper(cli: Cli) -> Result<()> {
         use_colors: !cli.no_color,
     };
 
+    // Determine watch paths from CLI and config
+    let mut watch_paths: Vec<PathBuf> = cli.watch.iter().map(PathBuf::from).collect();
+    if watch_paths.is_empty() {
+        watch_paths = app_config.monitoring.watch_paths.clone();
+    }
+
+    // Determine log directory
+    let log_dir = cli.log_dir.or_else(|| {
+        dirs::data_local_dir().map(|d| d.join("macagentwatch").join("logs"))
+    });
+
+    // Build network whitelist
+    let network_whitelist = NetworkWhitelist::new(
+        app_config.monitoring.network_whitelist.clone(),
+        vec![],
+    );
+
     // Build wrapper config
-    let config = WrapperConfig::new(command)
+    let mut config = WrapperConfig::new(command)
         .args(args)
         .logger_config(logger_config)
         .track_children(!cli.no_track_children)
-        .tracking_poll_ms(cli.tracking_poll_ms);
+        .tracking_poll_ms(cli.tracking_poll_ms)
+        .enable_fswatch(cli.enable_fswatch)
+        .watch_paths(watch_paths)
+        .enable_netmon(cli.enable_netmon)
+        .network_whitelist(network_whitelist);
+
+    if let Some(dir) = log_dir {
+        config = config.session_log_dir(dir);
+    }
 
     // Print banner
     if !cli.no_color {

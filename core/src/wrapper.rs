@@ -2,13 +2,18 @@
 //!
 //! Wraps and monitors child processes, capturing their I/O and tracking commands.
 
+use crate::detector::NetworkWhitelist;
 use crate::event::{Event, RiskLevel};
+use crate::fswatch::{FileSystemWatcher, FsWatchConfig};
 use crate::logger::{Logger, LoggerConfig};
+use crate::netmon::{NetMonConfig, NetworkMonitor};
 use crate::process_tracker::{ProcessTracker, TrackerConfig, TrackerEvent};
 use crate::risk::RiskScorer;
+use crate::storage::{EventStorage, SessionLogger};
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -33,6 +38,16 @@ pub struct WrapperConfig {
     pub track_children: bool,
     /// Polling interval for child process tracking (milliseconds)
     pub tracking_poll_ms: u64,
+    /// Enable file system monitoring
+    pub enable_fswatch: bool,
+    /// Paths to watch for file system changes
+    pub watch_paths: Vec<PathBuf>,
+    /// Enable network monitoring
+    pub enable_netmon: bool,
+    /// Network whitelist for allowed hosts
+    pub network_whitelist: Option<NetworkWhitelist>,
+    /// Session log directory (for JSON Lines logging)
+    pub session_log_dir: Option<PathBuf>,
 }
 
 impl Default for WrapperConfig {
@@ -46,6 +61,11 @@ impl Default for WrapperConfig {
             logger_config: LoggerConfig::default(),
             track_children: true,
             tracking_poll_ms: 100,
+            enable_fswatch: false,
+            watch_paths: Vec::new(),
+            enable_netmon: false,
+            network_whitelist: None,
+            session_log_dir: None,
         }
     }
 }
@@ -94,6 +114,36 @@ impl WrapperConfig {
         self.tracking_poll_ms = ms;
         self
     }
+
+    /// Enable file system monitoring
+    pub fn enable_fswatch(mut self, enabled: bool) -> Self {
+        self.enable_fswatch = enabled;
+        self
+    }
+
+    /// Set paths to watch for file system changes
+    pub fn watch_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.watch_paths = paths;
+        self
+    }
+
+    /// Enable network monitoring
+    pub fn enable_netmon(mut self, enabled: bool) -> Self {
+        self.enable_netmon = enabled;
+        self
+    }
+
+    /// Set network whitelist
+    pub fn network_whitelist(mut self, whitelist: NetworkWhitelist) -> Self {
+        self.network_whitelist = Some(whitelist);
+        self
+    }
+
+    /// Set session log directory
+    pub fn session_log_dir(mut self, dir: PathBuf) -> Self {
+        self.session_log_dir = Some(dir);
+        self
+    }
 }
 
 /// Event emitted by the wrapper
@@ -121,6 +171,19 @@ pub enum WrapperEvent {
     },
     /// Child process exited
     ChildExited { pid: u32 },
+    /// File system event
+    FileAccess {
+        path: PathBuf,
+        action: crate::event::FileAction,
+        risk_level: RiskLevel,
+    },
+    /// Network connection event
+    NetworkConnection {
+        host: String,
+        port: u16,
+        protocol: String,
+        risk_level: RiskLevel,
+    },
 }
 
 /// Process wrapper that monitors child process activity
@@ -129,17 +192,25 @@ pub struct ProcessWrapper {
     risk_scorer: RiskScorer,
     logger: Logger,
     event_tx: Option<Sender<WrapperEvent>>,
+    session_logger: Option<Arc<Mutex<SessionLogger>>>,
 }
 
 impl ProcessWrapper {
     /// Create a new process wrapper
     pub fn new(config: WrapperConfig) -> Self {
         let logger = Logger::new(config.logger_config.clone());
+        let session_logger = config.session_log_dir.as_ref().and_then(|dir| {
+            // Pass None for session_id to auto-generate timestamp-based ID
+            SessionLogger::new(dir, None)
+                .ok()
+                .map(|l| Arc::new(Mutex::new(l)))
+        });
         Self {
             config,
             risk_scorer: RiskScorer::new(),
             logger,
             event_tx: None,
+            session_logger,
         }
     }
 
@@ -189,6 +260,69 @@ impl ProcessWrapper {
         // Emit start event
         self.emit_event(WrapperEvent::Started { pid });
         self.log_session_start(pid);
+
+        // Start file system watcher if enabled
+        let fswatch_handle = if self.config.enable_fswatch && !self.config.watch_paths.is_empty() {
+            let fs_config = FsWatchConfig::new(self.config.watch_paths.clone());
+            let mut watcher = FileSystemWatcher::new(fs_config);
+            let fs_rx = watcher.subscribe();
+            let event_tx = self.event_tx.clone();
+
+            if watcher.start().is_ok() {
+                let handle = thread::spawn(move || {
+                    while let Ok(event) = fs_rx.recv() {
+                        if let crate::event::EventType::FileAccess { ref path, action } = event.event_type {
+                            if let Some(ref tx) = event_tx {
+                                let _ = tx.send(WrapperEvent::FileAccess {
+                                    path: path.clone(),
+                                    action,
+                                    risk_level: event.risk_level,
+                                });
+                            }
+                        }
+                    }
+                });
+                Some((watcher, handle))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Start network monitor if enabled
+        let netmon_handle = if self.config.enable_netmon && pid != 0 {
+            let net_config = NetMonConfig::new(pid);
+            let mut monitor = if let Some(ref whitelist) = self.config.network_whitelist {
+                NetworkMonitor::new(net_config).with_whitelist(whitelist.clone())
+            } else {
+                NetworkMonitor::new(net_config)
+            };
+            let net_rx = monitor.subscribe();
+            let event_tx = self.event_tx.clone();
+
+            if monitor.start().is_ok() {
+                let handle = thread::spawn(move || {
+                    while let Ok(event) = net_rx.recv() {
+                        if let crate::event::EventType::Network { ref host, port, ref protocol } = event.event_type {
+                            if let Some(ref tx) = event_tx {
+                                let _ = tx.send(WrapperEvent::NetworkConnection {
+                                    host: host.clone(),
+                                    port,
+                                    protocol: protocol.clone(),
+                                    risk_level: event.risk_level,
+                                });
+                            }
+                        }
+                    }
+                });
+                Some((monitor, handle))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Start child process tracker if enabled
         let tracker_handle = if self.config.track_children && pid != 0 {
@@ -334,6 +468,18 @@ impl ProcessWrapper {
             let _ = forward_handle.join();
         }
 
+        // Stop file system watcher
+        if let Some((mut watcher, handle)) = fswatch_handle {
+            watcher.stop();
+            let _ = handle.join();
+        }
+
+        // Stop network monitor
+        if let Some((mut monitor, handle)) = netmon_handle {
+            monitor.stop();
+            let _ = handle.join();
+        }
+
         // Signal threads to stop and wait for them
         drop(writer);
         let _ = output_handle.join();
@@ -399,12 +545,23 @@ impl ProcessWrapper {
     fn log_session_start(&self, pid: u32) {
         let event = Event::session_start(self.config.command.clone(), pid);
         let _ = self.logger.log_stdout(&event);
+        if let Some(ref logger) = self.session_logger {
+            if let Ok(mut l) = logger.lock() {
+                let _ = l.write_event(&event);
+            }
+        }
         self.emit_event(WrapperEvent::Event(event));
     }
 
     fn log_session_end(&self, pid: u32) {
         let event = Event::session_end(self.config.command.clone(), pid);
         let _ = self.logger.log_stdout(&event);
+        if let Some(ref logger) = self.session_logger {
+            if let Ok(mut l) = logger.lock() {
+                let _ = l.write_event(&event);
+                let _ = l.flush();
+            }
+        }
         self.emit_event(WrapperEvent::Event(event));
     }
 

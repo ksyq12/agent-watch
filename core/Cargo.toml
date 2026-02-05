@@ -17,6 +17,12 @@ libproc.workspace = true
 colored.workspace = true
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# v0.2.0: Config, FSEvents, Network monitoring
+toml.workspace = true
+dirs.workspace = true
+glob.workspace = true
+fsevent.workspace = true
+
 [dev-dependencies]
 tokio.workspace = true
 tempfile.workspace = true

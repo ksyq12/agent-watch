@@ -21,17 +21,30 @@
 //! let exit_code = wrapper.run_simple().expect("Failed to run");
 //! ```
 
+pub mod config;
+pub mod detector;
 pub mod event;
+pub mod fswatch;
 pub mod logger;
+pub mod netmon;
 pub mod process_tracker;
 pub mod risk;
+pub mod storage;
 pub mod wrapper;
 
 // Re-export commonly used types
+pub use config::{AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig};
+pub use detector::{
+    default_network_whitelist, default_sensitive_patterns, Detector, NetworkConnection,
+    NetworkWhitelist, SensitiveFileDetector,
+};
 pub use event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
-pub use logger::{LogFormat, LogDestination, Logger, LoggerConfig};
+pub use fswatch::{FileMonitor, FileSystemWatcher, FsEvent, FsWatchConfig};
+pub use logger::{LogDestination, LogFormat, Logger, LoggerConfig};
+pub use netmon::{NetMonConfig, NetworkMonitor, NetworkTracker, TrackedConnection};
 pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, TrackerEvent};
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
+pub use storage::{cleanup_old_logs, EventStorage, SessionLogger};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 
 /// Library version
