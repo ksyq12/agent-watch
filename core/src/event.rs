@@ -215,6 +215,34 @@ impl Event {
             RiskLevel::Low,
         )
     }
+
+    /// Create a process start event
+    pub fn process_start(process: String, pid: u32, ppid: Option<u32>, risk_level: RiskLevel) -> Self {
+        Self::new(
+            EventType::Process {
+                pid,
+                ppid,
+                action: ProcessAction::Start,
+            },
+            process,
+            pid,
+            risk_level,
+        )
+    }
+
+    /// Create a process exit event
+    pub fn process_exit(process: String, pid: u32, ppid: Option<u32>) -> Self {
+        Self::new(
+            EventType::Process {
+                pid,
+                ppid,
+                action: ProcessAction::Exit,
+            },
+            process,
+            pid,
+            RiskLevel::Low,
+        )
+    }
 }
 
 #[cfg(test)]

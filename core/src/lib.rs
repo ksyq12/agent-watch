@@ -23,12 +23,14 @@
 
 pub mod event;
 pub mod logger;
+pub mod process_tracker;
 pub mod risk;
 pub mod wrapper;
 
 // Re-export commonly used types
 pub use event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
 pub use logger::{LogFormat, LogDestination, Logger, LoggerConfig};
+pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, TrackerEvent};
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 

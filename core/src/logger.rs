@@ -20,20 +20,15 @@ pub enum LogFormat {
 }
 
 /// Log destination
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum LogDestination {
     /// Standard output
+    #[default]
     Stdout,
     /// Standard error
     Stderr,
     /// File path
     File(PathBuf),
-}
-
-impl Default for LogDestination {
-    fn default() -> Self {
-        LogDestination::Stdout
-    }
 }
 
 /// Logger configuration
@@ -61,6 +56,7 @@ impl Default for LoggerConfig {
 }
 
 /// Event logger
+#[derive(Clone)]
 pub struct Logger {
     config: LoggerConfig,
 }

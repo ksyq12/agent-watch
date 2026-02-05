@@ -39,6 +39,14 @@ struct Cli {
     #[arg(long)]
     headless: bool,
 
+    /// Disable child process tracking
+    #[arg(long)]
+    no_track_children: bool,
+
+    /// Polling interval for child process tracking (milliseconds)
+    #[arg(long, default_value = "100")]
+    tracking_poll_ms: u64,
+
     #[command(subcommand)]
     command: Option<Commands>,
 
@@ -259,7 +267,9 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     // Build wrapper config
     let config = WrapperConfig::new(command)
         .args(args)
-        .logger_config(logger_config);
+        .logger_config(logger_config)
+        .track_children(!cli.no_track_children)
+        .tracking_poll_ms(cli.tracking_poll_ms);
 
     // Print banner
     if !cli.no_color {
@@ -363,5 +373,24 @@ mod tests {
     fn test_risk_level_conversion() {
         assert_eq!(RiskLevel::from(RiskLevelArg::Low), RiskLevel::Low);
         assert_eq!(RiskLevel::from(RiskLevelArg::Critical), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_cli_parse_no_track_children() {
+        let cli = Cli::parse_from(["macagentwatch", "--no-track-children", "--", "cmd"]);
+        assert!(cli.no_track_children);
+    }
+
+    #[test]
+    fn test_cli_parse_tracking_poll_ms() {
+        let cli = Cli::parse_from(["macagentwatch", "--tracking-poll-ms", "50", "--", "cmd"]);
+        assert_eq!(cli.tracking_poll_ms, 50);
+    }
+
+    #[test]
+    fn test_cli_default_tracking_poll_ms() {
+        let cli = Cli::parse_from(["macagentwatch", "--", "cmd"]);
+        assert_eq!(cli.tracking_poll_ms, 100);
+        assert!(!cli.no_track_children);
     }
 }

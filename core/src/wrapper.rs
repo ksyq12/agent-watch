@@ -4,6 +4,7 @@
 
 use crate::event::{Event, RiskLevel};
 use crate::logger::{Logger, LoggerConfig};
+use crate::process_tracker::{ProcessTracker, TrackerConfig, TrackerEvent};
 use crate::risk::RiskScorer;
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -11,6 +12,7 @@ use std::io::{Read, Write};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 /// Configuration for the process wrapper
 #[derive(Debug, Clone)]
@@ -27,6 +29,10 @@ pub struct WrapperConfig {
     pub pty_size: (u16, u16),
     /// Logger configuration
     pub logger_config: LoggerConfig,
+    /// Enable child process tracking
+    pub track_children: bool,
+    /// Polling interval for child process tracking (milliseconds)
+    pub tracking_poll_ms: u64,
 }
 
 impl Default for WrapperConfig {
@@ -38,6 +44,8 @@ impl Default for WrapperConfig {
             env: Vec::new(),
             pty_size: (80, 24),
             logger_config: LoggerConfig::default(),
+            track_children: true,
+            tracking_poll_ms: 100,
         }
     }
 }
@@ -74,6 +82,18 @@ impl WrapperConfig {
         self.logger_config = config;
         self
     }
+
+    /// Enable or disable child process tracking
+    pub fn track_children(mut self, enabled: bool) -> Self {
+        self.track_children = enabled;
+        self
+    }
+
+    /// Set the polling interval for child process tracking (in milliseconds)
+    pub fn tracking_poll_ms(mut self, ms: u64) -> Self {
+        self.tracking_poll_ms = ms;
+        self
+    }
 }
 
 /// Event emitted by the wrapper
@@ -91,6 +111,16 @@ pub enum WrapperEvent {
     Exited { exit_code: Option<i32> },
     /// Monitoring event
     Event(Event),
+    /// Child process started
+    ChildStarted {
+        pid: u32,
+        ppid: u32,
+        name: String,
+        path: Option<String>,
+        risk_level: RiskLevel,
+    },
+    /// Child process exited
+    ChildExited { pid: u32 },
 }
 
 /// Process wrapper that monitors child process activity
@@ -159,6 +189,58 @@ impl ProcessWrapper {
         // Emit start event
         self.emit_event(WrapperEvent::Started { pid });
         self.log_session_start(pid);
+
+        // Start child process tracker if enabled
+        let tracker_handle = if self.config.track_children && pid != 0 {
+            let tracker_config = TrackerConfig::new(pid)
+                .poll_interval(Duration::from_millis(self.config.tracking_poll_ms));
+            let mut tracker = ProcessTracker::new(tracker_config)
+                .with_risk_scorer(self.risk_scorer.clone());
+            let tracker_rx = tracker.subscribe();
+            let event_tx = self.event_tx.clone();
+            let logger = self.logger.clone();
+            let _process_name = self.config.command.clone();
+
+            tracker.start();
+
+            // Spawn thread to forward tracker events
+            let forward_handle = thread::spawn(move || {
+                while let Ok(tracker_event) = tracker_rx.recv() {
+                    match tracker_event {
+                        TrackerEvent::ChildStarted { pid, ppid, name, path, risk_level } => {
+                            // Log the child process
+                            let event = Event::process_start(
+                                name.clone(),
+                                pid,
+                                Some(ppid),
+                                risk_level,
+                            );
+                            let _ = logger.log_stdout(&event);
+
+                            // Forward to wrapper event subscribers
+                            if let Some(ref tx) = event_tx {
+                                let _ = tx.send(WrapperEvent::ChildStarted {
+                                    pid,
+                                    ppid,
+                                    name,
+                                    path,
+                                    risk_level,
+                                });
+                            }
+                        }
+                        TrackerEvent::ChildExited { pid } => {
+                            if let Some(ref tx) = event_tx {
+                                let _ = tx.send(WrapperEvent::ChildExited { pid });
+                            }
+                        }
+                    }
+                }
+            });
+
+            Some((tracker, forward_handle))
+        } else {
+            None
+        };
 
         // Set up I/O handling
         let master = pair.master;
@@ -244,6 +326,13 @@ impl ProcessWrapper {
         // Wait for the child process to exit
         let status = child.wait().context("Failed to wait for child")?;
         let exit_code = status.exit_code();
+
+        // Stop the process tracker
+        if let Some((mut tracker, forward_handle)) = tracker_handle {
+            tracker.stop();
+            // Give the forward thread a chance to finish
+            let _ = forward_handle.join();
+        }
 
         // Signal threads to stop and wait for them
         drop(writer);
@@ -360,14 +449,6 @@ impl ProcessWrapper {
         let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
 
         Some((cmd, args))
-    }
-}
-
-impl Clone for RiskScorer {
-    fn clone(&self) -> Self {
-        // RiskScorer is stateless except for custom rules, so we create a new default one
-        // In a real implementation, we'd properly clone the rules
-        RiskScorer::new()
     }
 }
 

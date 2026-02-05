@@ -30,6 +30,7 @@ pub enum RiskPattern {
 }
 
 /// Risk scorer that analyzes commands
+#[derive(Clone)]
 pub struct RiskScorer {
     rules: Vec<RiskRule>,
     custom_high_risk: HashSet<String>,
@@ -407,7 +408,7 @@ mod tests {
     fn test_fork_bomb_detection() {
         let scorer = RiskScorer::new();
 
-        let (level, reason) = scorer.score(":()", &["{:|:&};:".to_string()]);
+        let (_level, _reason) = scorer.score(":()", &["{:|:&};:".to_string()]);
         // Fork bomb pattern check - the pattern should be in args
         let (level, reason) = scorer.score("bash", &["-c".to_string(), ":(){:|:&};:".to_string()]);
         assert_eq!(level, RiskLevel::Critical);
