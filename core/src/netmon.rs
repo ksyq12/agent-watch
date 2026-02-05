@@ -253,38 +253,146 @@ impl NetworkMonitor {
     }
 
     /// Get network connections for a specific PID using libproc
-    /// Note: This is a simplified implementation that returns empty for now
-    /// Full implementation requires careful handling of libproc socket APIs
     #[cfg(target_os = "macos")]
-    fn get_connections_for_pid(pid: u32, _config: &NetMonConfig) -> Vec<TrackedConnection> {
-        use libproc::libproc::file_info::ListFDs;
-        use libproc::libproc::file_info::ProcFDType;
+    fn get_connections_for_pid(pid: u32, config: &NetMonConfig) -> Vec<TrackedConnection> {
+        use libproc::libproc::file_info::{pidfdinfo, ListFDs, ProcFDType};
+        use libproc::libproc::net_info::{SocketFDInfo, SocketInfoKind, TcpSIState};
         use libproc::libproc::proc_pid::listpidinfo;
 
-        let connections = Vec::new();
+        let mut connections = Vec::new();
 
-        // Get file descriptors for the process
+        // Get all file descriptors for the process
         let fds = match listpidinfo::<ListFDs>(pid as i32, 256) {
             Ok(fds) => fds,
             Err(_) => return connections,
         };
 
-        // Count socket file descriptors (actual connection extraction is complex)
-        let socket_count = fds
-            .iter()
-            .filter(|fd| fd.proc_fdtype == ProcFDType::Socket as u32)
-            .count();
+        // Iterate through socket file descriptors
+        for fd_info in fds.iter() {
+            if fd_info.proc_fdtype != ProcFDType::Socket as u32 {
+                continue;
+            }
 
-        // For now, we just log that sockets exist
-        // Full implementation would extract remote addresses using pidfdinfo
-        if socket_count > 0 {
-            // Placeholder: in production, we would extract actual socket info
-            // using libproc's pidfdinfo with SocketFDInfo
+            // Get detailed socket information
+            let socket_info = match pidfdinfo::<SocketFDInfo>(pid as i32, fd_info.proc_fd) {
+                Ok(info) => info,
+                Err(_) => continue,
+            };
+
+            let kind: SocketInfoKind = socket_info.psi.soi_kind.into();
+
+            match kind {
+                SocketInfoKind::Tcp if config.track_tcp => {
+                    // Safety: accessing union field for TCP socket
+                    let tcp = unsafe { socket_info.psi.soi_proto.pri_tcp };
+                    let state: TcpSIState = tcp.tcpsi_state.into();
+
+                    // Only track established connections (not listening sockets)
+                    if !matches!(state, TcpSIState::Established | TcpSIState::SynSent | TcpSIState::SynReceived) {
+                        continue;
+                    }
+
+                    // Extract remote address and port
+                    let remote_port = tcp.tcpsi_ini.insi_fport as u16;
+                    if remote_port == 0 {
+                        continue;
+                    }
+
+                    let remote_addr = extract_ip_address(&tcp.tcpsi_ini, tcp.tcpsi_ini.insi_vflag);
+                    if remote_addr.is_none() {
+                        continue;
+                    }
+
+                    let host = remote_addr.unwrap().to_string();
+
+                    // Skip loopback addresses
+                    if host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
+                        continue;
+                    }
+
+                    connections.push(TrackedConnection::new(
+                        pid,
+                        host,
+                        remote_port,
+                        "tcp".to_string(),
+                    ));
+                }
+                SocketInfoKind::In if config.track_udp => {
+                    // Safety: accessing union field for In socket (UDP)
+                    let in_sock = unsafe { socket_info.psi.soi_proto.pri_in };
+
+                    // Extract remote address and port for UDP
+                    let remote_port = in_sock.insi_fport as u16;
+                    if remote_port == 0 {
+                        continue;
+                    }
+
+                    let remote_addr = extract_ip_address(&in_sock, in_sock.insi_vflag);
+                    if remote_addr.is_none() {
+                        continue;
+                    }
+
+                    let host = remote_addr.unwrap().to_string();
+
+                    // Skip loopback addresses
+                    if host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
+                        continue;
+                    }
+
+                    connections.push(TrackedConnection::new(
+                        pid,
+                        host,
+                        remote_port,
+                        "udp".to_string(),
+                    ));
+                }
+                _ => {}
+            }
         }
 
         connections
     }
+}
 
+/// Extract IP address from InSockInfo based on the vflag
+#[cfg(target_os = "macos")]
+fn extract_ip_address(
+    in_sock: &libproc::libproc::net_info::InSockInfo,
+    vflag: u8,
+) -> Option<std::net::IpAddr> {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    // vflag: 1 = IPv4, 2 = IPv6
+    if vflag == 1 {
+        // IPv4
+        // Safety: accessing union field for IPv4 address
+        let addr = unsafe { in_sock.insi_faddr.ina_46.i46a_addr4 };
+        let ip = Ipv4Addr::from(u32::from_be(addr.s_addr));
+
+        // Skip unspecified addresses
+        if ip.is_unspecified() {
+            return None;
+        }
+
+        Some(IpAddr::V4(ip))
+    } else if vflag == 2 {
+        // IPv6
+        // Safety: accessing union field for IPv6 address
+        let addr = unsafe { in_sock.insi_faddr.ina_6 };
+        let ip = Ipv6Addr::from(addr.s6_addr);
+
+        // Skip unspecified addresses
+        if ip.is_unspecified() {
+            return None;
+        }
+
+        Some(IpAddr::V6(ip))
+    } else {
+        None
+    }
+}
+
+impl NetworkMonitor {
     /// Create network event (for testing)
     pub fn create_event(&self, conn: &TrackedConnection) -> Event {
         let net_conn = conn.to_network_connection();

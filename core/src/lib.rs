@@ -29,6 +29,7 @@ pub mod logger;
 pub mod netmon;
 pub mod process_tracker;
 pub mod risk;
+pub mod sanitize;
 pub mod storage;
 pub mod wrapper;
 
@@ -44,6 +45,7 @@ pub use logger::{LogDestination, LogFormat, Logger, LoggerConfig};
 pub use netmon::{NetMonConfig, NetworkMonitor, NetworkTracker, TrackedConnection};
 pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, TrackerEvent};
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
+pub use sanitize::{sanitize_args, sanitize_command_string};
 pub use storage::{cleanup_old_logs, EventStorage, SessionLogger};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 

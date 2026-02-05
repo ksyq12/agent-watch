@@ -9,6 +9,7 @@ use crate::logger::{Logger, LoggerConfig};
 use crate::netmon::{NetMonConfig, NetworkMonitor};
 use crate::process_tracker::{ProcessTracker, TrackerConfig, TrackerEvent};
 use crate::risk::RiskScorer;
+use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -441,9 +442,11 @@ impl ProcessWrapper {
                             // Simple command detection from shell prompts
                             if let Some(cmd) = Self::detect_command(&line) {
                                 if let Some(ref tx) = event_tx {
+                                    // Sanitize args before sending event
+                                    let sanitized = crate::sanitize::sanitize_args(&cmd.1);
                                     let _ = tx.send(WrapperEvent::Command {
                                         command: cmd.0.clone(),
-                                        args: cmd.1.clone(),
+                                        args: sanitized,
                                     });
                                 }
                             }
@@ -514,10 +517,11 @@ impl ProcessWrapper {
         // Score the command
         let (risk_level, reason) = self.risk_scorer.score(&self.config.command, &self.config.args);
 
-        // Log the command
+        // Log the command with sanitized args
+        let sanitized_args = sanitize_args(&self.config.args);
         let event = Event::command(
             self.config.command.clone(),
-            self.config.args.clone(),
+            sanitized_args,
             self.config.command.clone(),
             std::process::id(),
             risk_level,

@@ -108,7 +108,20 @@ impl SensitiveFileDetector {
 
 impl Detector<PathBuf> for SensitiveFileDetector {
     fn is_sensitive(&self, item: &PathBuf) -> bool {
-        self.matches_pattern(item)
+        // Check original path first
+        if self.matches_pattern(item) {
+            return true;
+        }
+
+        // Try to resolve symlinks and check the resolved path
+        // This prevents symlink-based bypasses
+        if let Ok(resolved) = item.canonicalize() {
+            if resolved != *item && self.matches_pattern(&resolved) {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn risk_level(&self, item: &PathBuf) -> RiskLevel {
@@ -472,5 +485,53 @@ mod tests {
         let detector = SensitiveFileDetector::default();
         let cloned = detector.clone();
         assert_eq!(detector.patterns().len(), cloned.patterns().len());
+    }
+
+    #[test]
+    fn test_symlink_resolution() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let env_file = temp_dir.path().join(".env");
+        let link_path = temp_dir.path().join("config_link");
+
+        // Create the actual sensitive file
+        fs::write(&env_file, "SECRET=value").unwrap();
+
+        // Create a symlink pointing to the sensitive file
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&env_file, &link_path).unwrap();
+
+        let detector = SensitiveFileDetector::default();
+
+        // Original sensitive file should be detected
+        assert!(detector.is_sensitive(&env_file));
+
+        // Symlink should also be detected (via canonicalize)
+        #[cfg(unix)]
+        assert!(detector.is_sensitive(&link_path));
+    }
+
+    #[test]
+    fn test_broken_symlink_handling() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let link_path = temp_dir.path().join("broken_link");
+
+        // Create a symlink to a non-existent file
+        #[cfg(unix)]
+        {
+            let _ = std::os::unix::fs::symlink("/nonexistent/.env", &link_path);
+
+            let detector = SensitiveFileDetector::default();
+
+            // Broken symlink should not crash, should return false
+            // (the original path "broken_link" doesn't match sensitive patterns)
+            let result = detector.is_sensitive(&link_path);
+            // Just check it doesn't panic - result depends on whether symlink was created
+            let _ = result;
+        }
     }
 }
