@@ -3,7 +3,7 @@
 //! Handles loading, parsing, and validation of configuration files.
 //! Default configuration path: `~/.macagentwatch/config.toml`
 
-use anyhow::{Context, Result};
+use crate::error::{ConfigError, CoreError};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -35,7 +35,7 @@ impl Default for Config {
 
 impl Config {
     /// Load configuration from default path (~/.macagentwatch/config.toml)
-    pub fn load() -> Result<Self> {
+    pub fn load() -> Result<Self, CoreError> {
         let path = Self::default_path()?;
         if path.exists() {
             Self::load_from_path(&path)
@@ -45,50 +45,56 @@ impl Config {
     }
 
     /// Load configuration from a specific path
-    pub fn load_from_path(path: &PathBuf) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {:?}", path))?;
+    pub fn load_from_path(path: &std::path::Path) -> Result<Self, CoreError> {
+        let content = std::fs::read_to_string(path).map_err(|e| ConfigError::ReadFile {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
         Self::from_toml(&content)
     }
 
     /// Parse configuration from TOML string
-    pub fn from_toml(content: &str) -> Result<Self> {
-        toml::from_str(content).context("Failed to parse TOML configuration")
+    pub fn from_toml(content: &str) -> Result<Self, CoreError> {
+        Ok(toml::from_str(content).map_err(ConfigError::ParseToml)?)
     }
 
     /// Get the base configuration directory path (~/.macagentwatch)
-    fn config_base_dir() -> Result<PathBuf> {
+    fn config_base_dir() -> Result<PathBuf, CoreError> {
         dirs::home_dir()
-            .context("Could not determine home directory")
+            .ok_or(ConfigError::NoHomeDir)
             .map(|home| home.join(".macagentwatch"))
+            .map_err(CoreError::Config)
     }
 
     /// Get default configuration file path
-    pub fn default_path() -> Result<PathBuf> {
+    pub fn default_path() -> Result<PathBuf, CoreError> {
         Self::config_base_dir().map(|dir| dir.join("config.toml"))
     }
 
     /// Get default log directory path
-    pub fn default_log_dir() -> Result<PathBuf> {
+    pub fn default_log_dir() -> Result<PathBuf, CoreError> {
         Self::config_base_dir().map(|dir| dir.join("logs"))
     }
 
     /// Ensure configuration directory exists
-    pub fn ensure_config_dir() -> Result<PathBuf> {
+    pub fn ensure_config_dir() -> Result<PathBuf, CoreError> {
         let config_dir = Self::config_base_dir()?;
         if !config_dir.exists() {
-            std::fs::create_dir_all(&config_dir)
-                .with_context(|| format!("Failed to create config directory: {:?}", config_dir))?;
+            std::fs::create_dir_all(&config_dir).map_err(|e| ConfigError::CreateDir {
+                path: config_dir.clone(),
+                source: e,
+            })?;
         }
         Ok(config_dir)
     }
 
     /// Save configuration to file
-    pub fn save(&self, path: &PathBuf) -> Result<()> {
-        let content =
-            toml::to_string_pretty(self).context("Failed to serialize configuration to TOML")?;
-        std::fs::write(path, content)
-            .with_context(|| format!("Failed to write config file: {:?}", path))?;
+    pub fn save(&self, path: &std::path::Path) -> Result<(), CoreError> {
+        let content = toml::to_string_pretty(self).map_err(ConfigError::SerializeToml)?;
+        std::fs::write(path, content).map_err(|e| ConfigError::WriteFile {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
         Ok(())
     }
 }
@@ -136,7 +142,7 @@ impl Default for LoggingConfig {
 
 impl LoggingConfig {
     /// Get effective log directory (custom or default)
-    pub fn effective_log_dir(&self) -> Result<PathBuf> {
+    pub fn effective_log_dir(&self) -> Result<PathBuf, CoreError> {
         match &self.log_dir {
             Some(path) => Ok(path.clone()),
             None => Config::default_log_dir(),

@@ -89,8 +89,9 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
             continue;
         }
 
-        // Check for flags that indicate next arg is sensitive
-        if SENSITIVE_FLAGS.contains(&arg.as_str()) {
+        // Check for flags that indicate next arg is sensitive (case-insensitive)
+        let arg_lower = arg.to_lowercase();
+        if SENSITIVE_FLAGS.iter().any(|f| f.to_lowercase() == arg_lower) {
             result.push(arg.clone());
             mask_next = true;
             continue;
@@ -120,6 +121,12 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
             continue;
         }
 
+        // Check for URL with embedded credentials
+        if let Some(masked) = mask_url_credentials(arg) {
+            result.push(masked);
+            continue;
+        }
+
         result.push(arg.clone());
     }
 
@@ -142,11 +149,12 @@ fn mask_inline_flag(arg: &str) -> Option<String> {
 
 /// Mask environment variable patterns
 fn mask_env_variable(arg: &str) -> Option<String> {
+    let arg_lower = arg.to_lowercase();
     for prefix in SENSITIVE_ENV_PREFIXES {
-        if arg.starts_with(prefix) {
+        if arg_lower.starts_with(&prefix.to_lowercase()) {
             // Use find('=') for UTF-8 safe slicing
-            if let Some(eq_pos) = prefix.find('=') {
-                let var_name = &prefix[..eq_pos];
+            if let Some(eq_pos) = arg.find('=') {
+                let var_name = &arg[..eq_pos];
                 return Some(format!("{}={}", var_name, MASK));
             }
         }
@@ -219,29 +227,87 @@ fn mask_http_header(arg: &str) -> Option<String> {
     None
 }
 
+/// Mask credentials embedded in URLs (e.g., https://user:password@host.com)
+fn mask_url_credentials(arg: &str) -> Option<String> {
+    // Match patterns like scheme://user:pass@host
+    if let Some(scheme_end) = arg.find("://") {
+        let after_scheme = &arg[scheme_end + 3..];
+        if let Some(at_pos) = after_scheme.find('@') {
+            let credentials = &after_scheme[..at_pos];
+            if credentials.contains(':') {
+                let scheme = &arg[..scheme_end + 3];
+                let host_part = &after_scheme[at_pos + 1..];
+                return Some(format!("{}{}@{}", scheme, MASK, host_part));
+            }
+        }
+    }
+    None
+}
+
 /// Sanitize a full command string (command + args joined)
 ///
-/// This is useful for sanitizing commands that are passed as a single string
+/// This is useful for sanitizing commands that are passed as a single string.
+/// Handles basic quoting (single and double quotes).
 pub fn sanitize_command_string(command: &str) -> Cow<'_, str> {
     // Check for common patterns that need sanitization
-    let needs_sanitization = SENSITIVE_FLAGS.iter().any(|f| command.contains(f))
+    let needs_sanitization = SENSITIVE_FLAGS.iter().any(|f| command.to_lowercase().contains(&f.to_lowercase()))
         || command.contains("sk-ant-")
         || command.contains("sk-")
         || command.contains("ghp_")
         || command.contains("Bearer ")
-        || SENSITIVE_ENV_PREFIXES.iter().any(|p| command.contains(p));
+        || command.contains("://")
+        || SENSITIVE_ENV_PREFIXES.iter().any(|p| command.to_lowercase().contains(&p.to_lowercase()));
 
     if !needs_sanitization {
         return Cow::Borrowed(command);
     }
 
-    // Split and sanitize
-    let parts: Vec<String> = command
-        .split_whitespace()
-        .map(String::from)
-        .collect();
+    // Shell-aware splitting that respects quotes
+    let parts = shell_split(command);
 
     Cow::Owned(sanitize_args(&parts).join(" "))
+}
+
+/// Simple shell-aware string splitting that respects single and double quotes
+fn shell_split(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                // Don't include the quote character in the token
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                // Don't include the quote character in the token
+            }
+            '\\' if in_double_quote || (!in_single_quote && !in_double_quote) => {
+                // Escaped character — include the next char literally
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                }
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    parts
 }
 
 #[cfg(test)]
@@ -401,5 +467,66 @@ mod tests {
         let args = vec!["Basic dXNlcjpwYXNzd29yZA==".to_string()];
         let result = sanitize_args(&args);
         assert_eq!(result, vec!["Basic ***"]);
+    }
+
+    #[test]
+    fn test_case_insensitive_flag() {
+        let args = vec!["--Password".to_string(), "secret".to_string()];
+        let result = sanitize_args(&args);
+        assert_eq!(result, vec!["--Password", "***"]);
+    }
+
+    #[test]
+    fn test_case_insensitive_flag_uppercase() {
+        let args = vec!["--TOKEN".to_string(), "abc123".to_string()];
+        let result = sanitize_args(&args);
+        assert_eq!(result, vec!["--TOKEN", "***"]);
+    }
+
+    #[test]
+    fn test_case_insensitive_env_variable() {
+        let args = vec!["anthropic_api_key=sk-ant-test".to_string()];
+        let result = sanitize_args(&args);
+        assert_eq!(result, vec!["anthropic_api_key=***"]);
+    }
+
+    #[test]
+    fn test_url_credentials() {
+        let args = vec!["https://admin:password123@db.example.com/mydb".to_string()];
+        let result = sanitize_args(&args);
+        assert_eq!(result, vec!["https://***@db.example.com/mydb"]);
+    }
+
+    #[test]
+    fn test_url_no_credentials() {
+        let args = vec!["https://example.com/path".to_string()];
+        let result = sanitize_args(&args);
+        assert_eq!(result, vec!["https://example.com/path"]);
+    }
+
+    #[test]
+    fn test_quoted_command_string() {
+        let cmd = r#"curl --password="my secret" https://api.example.com"#;
+        let result = sanitize_command_string(cmd);
+        assert!(result.contains("***"));
+        assert!(!result.contains("my secret"));
+    }
+
+    #[test]
+    fn test_shell_split_basic() {
+        let parts = shell_split("hello world");
+        assert_eq!(parts, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn test_shell_split_double_quotes() {
+        let parts = shell_split(r#"--password="my secret""#);
+        assert_eq!(parts, vec!["--password=my secret"]);
+    }
+
+    #[test]
+    fn test_shell_split_single_quotes() {
+        let parts = shell_split("--token='abc def'");
+        assert_eq!(parts, vec!["--token=abc def"]);
     }
 }

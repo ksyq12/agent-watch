@@ -3,8 +3,8 @@
 //! Handles session-based log file storage with JSON Lines format.
 //! Each monitoring session creates a new log file.
 
+use crate::error::{CoreError, StorageError};
 use crate::event::Event;
-use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
@@ -13,9 +13,9 @@ use std::path::PathBuf;
 /// Trait for event storage implementations
 pub trait EventStorage: Send {
     /// Write an event to storage
-    fn write_event(&mut self, event: &Event) -> Result<()>;
+    fn write_event(&mut self, event: &Event) -> Result<(), CoreError>;
     /// Flush buffered data to disk
-    fn flush(&mut self) -> Result<()>;
+    fn flush(&mut self) -> Result<(), CoreError>;
     /// Get the storage file path
     fn path(&self) -> &PathBuf;
 }
@@ -38,11 +38,13 @@ impl SessionLogger {
     /// # Arguments
     /// * `log_dir` - Directory to store log files
     /// * `session_id` - Optional custom session ID (auto-generated if None)
-    pub fn new(log_dir: &PathBuf, session_id: Option<String>) -> Result<Self> {
+    pub fn new(log_dir: &PathBuf, session_id: Option<String>) -> Result<Self, CoreError> {
         // Ensure log directory exists
         if !log_dir.exists() {
-            std::fs::create_dir_all(log_dir)
-                .with_context(|| format!("Failed to create log directory: {:?}", log_dir))?;
+            std::fs::create_dir_all(log_dir).map_err(|e| StorageError::CreateDir {
+                path: log_dir.clone(),
+                source: e,
+            })?;
         }
 
         let session_start = Utc::now();
@@ -61,7 +63,10 @@ impl SessionLogger {
             .create(true)
             .append(true)
             .open(&file_path)
-            .with_context(|| format!("Failed to create log file: {:?}", file_path))?;
+            .map_err(|e| StorageError::OpenFile {
+                path: file_path.clone(),
+                source: e,
+            })?;
 
         let writer = BufWriter::new(file);
 
@@ -90,7 +95,7 @@ impl SessionLogger {
     }
 
     /// Write session metadata as first line
-    pub fn write_session_header(&mut self, process: &str, pid: u32) -> Result<()> {
+    pub fn write_session_header(&mut self, process: &str, pid: u32) -> Result<(), CoreError> {
         let header = serde_json::json!({
             "session_id": self.session_id,
             "session_start": self.session_start.to_rfc3339(),
@@ -98,12 +103,12 @@ impl SessionLogger {
             "pid": pid,
             "type": "session_start"
         });
-        writeln!(self.writer, "{}", header).context("Failed to write session header")?;
+        writeln!(self.writer, "{}", header).map_err(StorageError::Write)?;
         Ok(())
     }
 
     /// Write session end marker
-    pub fn write_session_footer(&mut self, exit_code: Option<i32>) -> Result<()> {
+    pub fn write_session_footer(&mut self, exit_code: Option<i32>) -> Result<(), CoreError> {
         let footer = serde_json::json!({
             "session_id": self.session_id,
             "session_end": Utc::now().to_rfc3339(),
@@ -111,22 +116,22 @@ impl SessionLogger {
             "exit_code": exit_code,
             "type": "session_end"
         });
-        writeln!(self.writer, "{}", footer).context("Failed to write session footer")?;
+        writeln!(self.writer, "{}", footer).map_err(StorageError::Write)?;
         self.flush()?;
         Ok(())
     }
 }
 
 impl EventStorage for SessionLogger {
-    fn write_event(&mut self, event: &Event) -> Result<()> {
-        let json = serde_json::to_string(event).context("Failed to serialize event")?;
-        writeln!(self.writer, "{}", json).context("Failed to write event to log file")?;
+    fn write_event(&mut self, event: &Event) -> Result<(), CoreError> {
+        let json = serde_json::to_string(event).map_err(StorageError::Serialize)?;
+        writeln!(self.writer, "{}", json).map_err(StorageError::Write)?;
         self.event_count += 1;
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.writer.flush().context("Failed to flush log buffer")?;
+    fn flush(&mut self) -> Result<(), CoreError> {
+        self.writer.flush().map_err(StorageError::Flush)?;
         Ok(())
     }
 
@@ -142,7 +147,7 @@ impl Drop for SessionLogger {
 }
 
 /// Clean up old log files based on retention policy
-pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<usize> {
+pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<usize, CoreError> {
     if retention_days == 0 {
         return Ok(0);
     }

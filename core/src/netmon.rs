@@ -23,6 +23,8 @@ pub struct NetMonConfig {
     pub track_tcp: bool,
     /// Track UDP connections
     pub track_udp: bool,
+    /// Maximum number of seen connections before resetting (0 = unlimited)
+    pub max_seen_connections: usize,
 }
 
 impl Default for NetMonConfig {
@@ -32,6 +34,7 @@ impl Default for NetMonConfig {
             poll_interval: Duration::from_millis(500),
             track_tcp: true,
             track_udp: true,
+            max_seen_connections: 10_000,
         }
     }
 }
@@ -60,6 +63,12 @@ impl NetMonConfig {
     /// Enable/disable UDP tracking
     pub fn track_udp(mut self, enabled: bool) -> Self {
         self.track_udp = enabled;
+        self
+    }
+
+    /// Set maximum seen connections cache size (0 = unlimited)
+    pub fn max_seen_connections(mut self, max: usize) -> Self {
+        self.max_seen_connections = max;
         self
     }
 }
@@ -140,23 +149,36 @@ impl NetworkMonitor {
 
     /// Add a PID to track
     pub fn add_pid(&self, pid: u32) {
-        self.tracked_pids.lock().unwrap().insert(pid);
+        if let Ok(mut pids) = self.tracked_pids.lock() {
+            pids.insert(pid);
+        }
     }
 
     /// Remove a PID from tracking
     pub fn remove_pid(&self, pid: u32) {
-        self.tracked_pids.lock().unwrap().remove(&pid);
+        if let Ok(mut pids) = self.tracked_pids.lock() {
+            pids.remove(&pid);
+        }
+    }
+
+    /// Clear the seen connections cache
+    pub fn clear_seen_connections(&self) {
+        if let Ok(mut seen) = self.seen_connections.lock() {
+            seen.clear();
+        }
     }
 
     /// Check if running
     pub fn is_running(&self) -> bool {
-        self.monitor_thread.is_some() && !*self.stop_flag.lock().unwrap()
+        self.monitor_thread.is_some() && self.stop_flag.lock().map(|g| !*g).unwrap_or(false)
     }
 
     /// Start monitoring
     #[cfg(target_os = "macos")]
     pub fn start(&mut self) -> Result<()> {
-        *self.stop_flag.lock().unwrap() = false;
+        if let Ok(mut flag) = self.stop_flag.lock() {
+            *flag = false;
+        }
 
         let config = self.config.clone();
         let whitelist = self.whitelist.clone();
@@ -188,7 +210,9 @@ impl NetworkMonitor {
 
     /// Stop monitoring
     pub fn stop(&mut self) {
-        *self.stop_flag.lock().unwrap() = true;
+        if let Ok(mut flag) = self.stop_flag.lock() {
+            *flag = true;
+        }
         if let Some(handle) = self.monitor_thread.take() {
             let _ = handle.join();
         }
@@ -205,12 +229,14 @@ impl NetworkMonitor {
         seen_connections: Arc<Mutex<HashSet<TrackedConnection>>>,
     ) {
         loop {
-            if *stop_flag.lock().unwrap() {
+            if stop_flag.lock().map(|g| *g).unwrap_or(true) {
                 break;
             }
 
             // Get current PIDs to check
-            let pids: Vec<u32> = tracked_pids.lock().unwrap().iter().cloned().collect();
+            let pids: Vec<u32> = tracked_pids.lock()
+                .map(|g| g.iter().cloned().collect())
+                .unwrap_or_default();
 
             for pid in pids {
                 // Get connections for this PID
@@ -219,11 +245,19 @@ impl NetworkMonitor {
                 for conn in connections {
                     // Check if we've seen this connection before
                     {
-                        let mut seen = seen_connections.lock().unwrap();
+                        let Ok(mut seen) = seen_connections.lock() else {
+                            continue;
+                        };
                         if seen.contains(&conn) {
                             continue;
                         }
                         seen.insert(conn.clone());
+                        // Prevent unbounded growth
+                        if config.max_seen_connections > 0
+                            && seen.len() > config.max_seen_connections
+                        {
+                            seen.clear();
+                        }
                     }
 
                     // Determine risk level
@@ -414,7 +448,9 @@ impl NetworkMonitor {
     pub fn report_connection(&self, conn: TrackedConnection) {
         // Check if we've seen this connection before
         {
-            let mut seen = self.seen_connections.lock().unwrap();
+            let Ok(mut seen) = self.seen_connections.lock() else {
+                return;
+            };
             if seen.contains(&conn) {
                 return;
             }

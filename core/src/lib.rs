@@ -23,6 +23,7 @@
 
 pub mod config;
 pub mod detector;
+pub mod error;
 pub mod event;
 pub mod fswatch;
 pub mod logger;
@@ -35,6 +36,7 @@ pub mod wrapper;
 
 // Re-export commonly used types
 pub use config::{AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig};
+pub use error::{ConfigError, CoreError, StorageError};
 pub use detector::{
     default_network_whitelist, default_sensitive_patterns, Detector, NetworkConnection,
     NetworkWhitelist, SensitiveFileDetector,

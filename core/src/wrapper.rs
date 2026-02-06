@@ -187,6 +187,180 @@ pub enum WrapperEvent {
     },
 }
 
+/// Manages the lifecycle of all monitoring subsystems
+struct MonitoringOrchestrator {
+    tracker: Option<(ProcessTracker, thread::JoinHandle<()>)>,
+    fs_watcher: Option<(FileSystemWatcher, thread::JoinHandle<()>)>,
+    net_monitor: Option<(NetworkMonitor, thread::JoinHandle<()>)>,
+}
+
+impl MonitoringOrchestrator {
+    /// Start all configured monitoring subsystems
+    fn start(
+        config: &WrapperConfig,
+        pid: u32,
+        risk_scorer: &RiskScorer,
+        logger: &Logger,
+        event_tx: &Option<Sender<WrapperEvent>>,
+    ) -> Self {
+        let fs_watcher = Self::start_fswatch(config, event_tx);
+        let net_monitor = Self::start_netmon(config, pid, event_tx);
+        let tracker = Self::start_tracker(config, pid, risk_scorer, logger, event_tx);
+
+        Self {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        }
+    }
+
+    /// Stop all monitoring subsystems gracefully
+    fn stop(self) {
+        // Stop in reverse order of startup
+        if let Some((mut tracker, handle)) = self.tracker {
+            tracker.stop();
+            let _ = handle.join();
+        }
+        if let Some((mut watcher, handle)) = self.fs_watcher {
+            watcher.stop();
+            let _ = handle.join();
+        }
+        if let Some((mut monitor, handle)) = self.net_monitor {
+            monitor.stop();
+            let _ = handle.join();
+        }
+    }
+
+    fn start_fswatch(
+        config: &WrapperConfig,
+        event_tx: &Option<Sender<WrapperEvent>>,
+    ) -> Option<(FileSystemWatcher, thread::JoinHandle<()>)> {
+        if !config.enable_fswatch || config.watch_paths.is_empty() {
+            return None;
+        }
+
+        let fs_config = FsWatchConfig::new(config.watch_paths.clone());
+        let mut watcher = FileSystemWatcher::new(fs_config);
+        let fs_rx = watcher.subscribe();
+        let event_tx = event_tx.clone();
+
+        if watcher.start().is_err() {
+            return None;
+        }
+
+        let handle = thread::spawn(move || {
+            while let Ok(event) = fs_rx.recv() {
+                if let crate::event::EventType::FileAccess { ref path, action } = event.event_type {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(WrapperEvent::FileAccess {
+                            path: path.clone(),
+                            action,
+                            risk_level: event.risk_level,
+                        });
+                    }
+                }
+            }
+        });
+
+        Some((watcher, handle))
+    }
+
+    fn start_netmon(
+        config: &WrapperConfig,
+        pid: u32,
+        event_tx: &Option<Sender<WrapperEvent>>,
+    ) -> Option<(NetworkMonitor, thread::JoinHandle<()>)> {
+        if !config.enable_netmon || pid == 0 {
+            return None;
+        }
+
+        let net_config = NetMonConfig::new(pid);
+        let mut monitor = if let Some(ref whitelist) = config.network_whitelist {
+            NetworkMonitor::new(net_config).with_whitelist(whitelist.clone())
+        } else {
+            NetworkMonitor::new(net_config)
+        };
+        let net_rx = monitor.subscribe();
+        let event_tx = event_tx.clone();
+
+        if monitor.start().is_err() {
+            return None;
+        }
+
+        let handle = thread::spawn(move || {
+            while let Ok(event) = net_rx.recv() {
+                if let crate::event::EventType::Network { ref host, port, ref protocol } = event.event_type {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(WrapperEvent::NetworkConnection {
+                            host: host.clone(),
+                            port,
+                            protocol: protocol.clone(),
+                            risk_level: event.risk_level,
+                        });
+                    }
+                }
+            }
+        });
+
+        Some((monitor, handle))
+    }
+
+    fn start_tracker(
+        config: &WrapperConfig,
+        pid: u32,
+        risk_scorer: &RiskScorer,
+        logger: &Logger,
+        event_tx: &Option<Sender<WrapperEvent>>,
+    ) -> Option<(ProcessTracker, thread::JoinHandle<()>)> {
+        if !config.track_children || pid == 0 {
+            return None;
+        }
+
+        let tracker_config = TrackerConfig::new(pid)
+            .poll_interval(Duration::from_millis(config.tracking_poll_ms));
+        let mut tracker = ProcessTracker::new(tracker_config)
+            .with_risk_scorer(risk_scorer.clone());
+        let tracker_rx = tracker.subscribe();
+        let event_tx = event_tx.clone();
+        let logger = logger.clone();
+
+        tracker.start();
+
+        let handle = thread::spawn(move || {
+            while let Ok(tracker_event) = tracker_rx.recv() {
+                match tracker_event {
+                    TrackerEvent::ChildStarted { pid, ppid, name, path, risk_level } => {
+                        let event = Event::process_start(
+                            name.clone(),
+                            pid,
+                            Some(ppid),
+                            risk_level,
+                        );
+                        let _ = logger.log_stdout(&event);
+
+                        if let Some(ref tx) = event_tx {
+                            let _ = tx.send(WrapperEvent::ChildStarted {
+                                pid,
+                                ppid,
+                                name,
+                                path,
+                                risk_level,
+                            });
+                        }
+                    }
+                    TrackerEvent::ChildExited { pid } => {
+                        if let Some(ref tx) = event_tx {
+                            let _ = tx.send(WrapperEvent::ChildExited { pid });
+                        }
+                    }
+                }
+            }
+        });
+
+        Some((tracker, handle))
+    }
+}
+
 /// Process wrapper that monitors child process activity
 pub struct ProcessWrapper {
     config: WrapperConfig,
@@ -262,120 +436,10 @@ impl ProcessWrapper {
         self.emit_event(WrapperEvent::Started { pid });
         self.log_session_start(pid);
 
-        // Start file system watcher if enabled
-        let fswatch_handle = if self.config.enable_fswatch && !self.config.watch_paths.is_empty() {
-            let fs_config = FsWatchConfig::new(self.config.watch_paths.clone());
-            let mut watcher = FileSystemWatcher::new(fs_config);
-            let fs_rx = watcher.subscribe();
-            let event_tx = self.event_tx.clone();
-
-            if watcher.start().is_ok() {
-                let handle = thread::spawn(move || {
-                    while let Ok(event) = fs_rx.recv() {
-                        if let crate::event::EventType::FileAccess { ref path, action } = event.event_type {
-                            if let Some(ref tx) = event_tx {
-                                let _ = tx.send(WrapperEvent::FileAccess {
-                                    path: path.clone(),
-                                    action,
-                                    risk_level: event.risk_level,
-                                });
-                            }
-                        }
-                    }
-                });
-                Some((watcher, handle))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Start network monitor if enabled
-        let netmon_handle = if self.config.enable_netmon && pid != 0 {
-            let net_config = NetMonConfig::new(pid);
-            let mut monitor = if let Some(ref whitelist) = self.config.network_whitelist {
-                NetworkMonitor::new(net_config).with_whitelist(whitelist.clone())
-            } else {
-                NetworkMonitor::new(net_config)
-            };
-            let net_rx = monitor.subscribe();
-            let event_tx = self.event_tx.clone();
-
-            if monitor.start().is_ok() {
-                let handle = thread::spawn(move || {
-                    while let Ok(event) = net_rx.recv() {
-                        if let crate::event::EventType::Network { ref host, port, ref protocol } = event.event_type {
-                            if let Some(ref tx) = event_tx {
-                                let _ = tx.send(WrapperEvent::NetworkConnection {
-                                    host: host.clone(),
-                                    port,
-                                    protocol: protocol.clone(),
-                                    risk_level: event.risk_level,
-                                });
-                            }
-                        }
-                    }
-                });
-                Some((monitor, handle))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Start child process tracker if enabled
-        let tracker_handle = if self.config.track_children && pid != 0 {
-            let tracker_config = TrackerConfig::new(pid)
-                .poll_interval(Duration::from_millis(self.config.tracking_poll_ms));
-            let mut tracker = ProcessTracker::new(tracker_config)
-                .with_risk_scorer(self.risk_scorer.clone());
-            let tracker_rx = tracker.subscribe();
-            let event_tx = self.event_tx.clone();
-            let logger = self.logger.clone();
-            let _process_name = self.config.command.clone();
-
-            tracker.start();
-
-            // Spawn thread to forward tracker events
-            let forward_handle = thread::spawn(move || {
-                while let Ok(tracker_event) = tracker_rx.recv() {
-                    match tracker_event {
-                        TrackerEvent::ChildStarted { pid, ppid, name, path, risk_level } => {
-                            // Log the child process
-                            let event = Event::process_start(
-                                name.clone(),
-                                pid,
-                                Some(ppid),
-                                risk_level,
-                            );
-                            let _ = logger.log_stdout(&event);
-
-                            // Forward to wrapper event subscribers
-                            if let Some(ref tx) = event_tx {
-                                let _ = tx.send(WrapperEvent::ChildStarted {
-                                    pid,
-                                    ppid,
-                                    name,
-                                    path,
-                                    risk_level,
-                                });
-                            }
-                        }
-                        TrackerEvent::ChildExited { pid } => {
-                            if let Some(ref tx) = event_tx {
-                                let _ = tx.send(WrapperEvent::ChildExited { pid });
-                            }
-                        }
-                    }
-                }
-            });
-
-            Some((tracker, forward_handle))
-        } else {
-            None
-        };
+        // Start all monitoring via orchestrator
+        let orchestrator = MonitoringOrchestrator::start(
+            &self.config, pid, &self.risk_scorer, &self.logger, &self.event_tx,
+        );
 
         // Set up I/O handling
         let master = pair.master;
@@ -411,8 +475,6 @@ impl ProcessWrapper {
 
         // Read and process output
         let event_tx = self.event_tx.clone();
-        let _process_name = self.config.command.clone();
-        let _risk_scorer = self.risk_scorer.clone();
 
         let output_handle = thread::spawn(move || {
             let mut buffer = [0u8; 4096];
@@ -433,14 +495,14 @@ impl ProcessWrapper {
                             let _ = tx.send(WrapperEvent::Stdout(chunk.to_string()));
                         }
 
-                        // Parse for commands (simple detection)
+                        // Parse for commands — use drain for efficient string manipulation
                         line_buffer.push_str(&chunk);
                         while let Some(newline_pos) = line_buffer.find('\n') {
-                            let line = line_buffer[..newline_pos].to_string();
-                            line_buffer = line_buffer[newline_pos + 1..].to_string();
+                            let line: String = line_buffer.drain(..=newline_pos).collect();
+                            let line = line.trim_end_matches('\n');
 
                             // Simple command detection from shell prompts
-                            if let Some(cmd) = Self::detect_command(&line) {
+                            if let Some(cmd) = Self::detect_command(line) {
                                 if let Some(ref tx) = event_tx {
                                     // Sanitize args before sending event
                                     let sanitized = crate::sanitize::sanitize_args(&cmd.1);
@@ -464,26 +526,10 @@ impl ProcessWrapper {
         let status = child.wait().context("Failed to wait for child")?;
         let exit_code = status.exit_code();
 
-        // Stop the process tracker
-        if let Some((mut tracker, forward_handle)) = tracker_handle {
-            tracker.stop();
-            // Give the forward thread a chance to finish
-            let _ = forward_handle.join();
-        }
+        // Stop all monitoring
+        orchestrator.stop();
 
-        // Stop file system watcher
-        if let Some((mut watcher, handle)) = fswatch_handle {
-            watcher.stop();
-            let _ = handle.join();
-        }
-
-        // Stop network monitor
-        if let Some((mut monitor, handle)) = netmon_handle {
-            monitor.stop();
-            let _ = handle.join();
-        }
-
-        // Signal threads to stop and wait for them
+        // Signal I/O threads to stop and wait for them
         drop(writer);
         let _ = output_handle.join();
         // stdin_handle will exit when stdin closes or process exits

@@ -106,7 +106,7 @@ impl FileSystemWatcher {
 
     /// Check if watcher is running
     pub fn is_running(&self) -> bool {
-        self.watch_thread.is_some() && !*self.stop_flag.lock().unwrap()
+        self.watch_thread.is_some() && self.stop_flag.lock().map(|g| !*g).unwrap_or(false)
     }
 
     /// Start watching file system
@@ -116,7 +116,9 @@ impl FileSystemWatcher {
             return Ok(());
         }
 
-        *self.stop_flag.lock().unwrap() = false;
+        if let Ok(mut flag) = self.stop_flag.lock() {
+            *flag = false;
+        }
 
         let paths: Vec<String> = self
             .config
@@ -167,7 +169,7 @@ impl FileSystemWatcher {
 
         // Process events until stop
         loop {
-            if *stop_flag.lock().unwrap() {
+            if stop_flag.lock().map(|g| *g).unwrap_or(true) {
                 break;
             }
 
@@ -207,7 +209,9 @@ impl FileSystemWatcher {
 
     /// Stop watching
     pub fn stop(&mut self) {
-        *self.stop_flag.lock().unwrap() = true;
+        if let Ok(mut flag) = self.stop_flag.lock() {
+            *flag = true;
+        }
 
         if let Some(handle) = self.watch_thread.take() {
             let _ = handle.join();

@@ -265,29 +265,36 @@ impl ProcessTracker {
     /// Get all descendant PIDs of a process
     #[cfg(target_os = "macos")]
     fn get_descendants(root_pid: u32, max_depth: Option<usize>) -> Vec<u32> {
+        // Fetch all PIDs once and build a parent->children map
+        let all_pids = match pids_by_type(ProcFilter::All) {
+            Ok(pids) => pids,
+            Err(_) => return Vec::new(),
+        };
+
+        // Build HashMap: parent_pid -> Vec<child_pid>
+        let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+        for pid in all_pids {
+            if pid == 0 {
+                continue;
+            }
+            if let Ok(info) = pidinfo::<BSDInfo>(pid as i32, 0) {
+                children_map.entry(info.pbi_ppid).or_default().push(pid);
+            }
+        }
+
+        // BFS using the pre-built map
         let mut descendants = Vec::new();
         let mut to_visit = vec![(root_pid, 0usize)];
 
         while let Some((pid, depth)) = to_visit.pop() {
-            // Check depth limit
             if max_depth.map(|max| depth > max).unwrap_or(false) {
                 continue;
             }
 
-            // Get children of this process
-            if let Ok(all_pids) = pids_by_type(ProcFilter::All) {
-                for child_pid in all_pids {
-                    if child_pid == 0 {
-                        continue;
-                    }
-
-                    // Get parent PID of this process
-                    if let Ok(info) = pidinfo::<BSDInfo>(child_pid as i32, 0) {
-                        if info.pbi_ppid == pid {
-                            descendants.push(child_pid);
-                            to_visit.push((child_pid, depth + 1));
-                        }
-                    }
+            if let Some(children) = children_map.get(&pid) {
+                for &child_pid in children {
+                    descendants.push(child_pid);
+                    to_visit.push((child_pid, depth + 1));
                 }
             }
         }
