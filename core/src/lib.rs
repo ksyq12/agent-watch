@@ -25,6 +25,7 @@ pub mod config;
 pub mod detector;
 pub mod error;
 pub mod event;
+pub mod ffi;
 pub mod fswatch;
 pub mod logger;
 pub mod netmon;
@@ -33,6 +34,8 @@ pub mod risk;
 pub mod sanitize;
 pub mod storage;
 pub mod wrapper;
+
+uniffi::setup_scaffolding!();
 
 // Re-export commonly used types
 pub use config::{AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig};
