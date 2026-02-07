@@ -9,9 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 /// Pre-computed lowercase sensitive directory patterns for efficient matching
-static SENSITIVE_DIRS_LOWER: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
-    vec!["/.ssh/", "/.aws/", "/.gnupg/", "/.kube/"]
-});
+static SENSITIVE_DIRS_LOWER: LazyLock<Vec<&'static str>> =
+    LazyLock::new(|| vec!["/.ssh/", "/.aws/", "/.gnupg/", "/.kube/"]);
 
 /// Trait for detecting sensitive items
 pub trait Detector<T>: Clone + Send {

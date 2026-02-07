@@ -3,6 +3,7 @@
 //! Wraps and monitors child processes, capturing their I/O and tracking commands.
 
 use crate::detector::NetworkWhitelist;
+use crate::error::CoreError;
 use crate::event::{Event, RiskLevel};
 use crate::fswatch::{FileSystemWatcher, FsWatchConfig};
 use crate::logger::{Logger, LoggerConfig};
@@ -12,7 +13,6 @@ use crate::risk::RiskScorer;
 use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
 use crate::types::MonitoringSubsystem;
-use crate::error::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -487,9 +487,10 @@ impl ProcessWrapper {
             .map_err(|e| CoreError::Wrapper(format!("Failed to clone reader: {}", e)))?;
 
         // Forward stdin to the PTY
-        let writer = Arc::new(Mutex::new(
-            master.take_writer().map_err(|e| CoreError::Wrapper(format!("Failed to take writer: {}", e)))?,
-        ));
+        let writer =
+            Arc::new(Mutex::new(master.take_writer().map_err(|e| {
+                CoreError::Wrapper(format!("Failed to take writer: {}", e))
+            })?));
         let writer_clone = Arc::clone(&writer);
 
         // Spawn stdin forwarding thread
@@ -573,7 +574,9 @@ impl ProcessWrapper {
         });
 
         // Wait for the child process to exit
-        let status = child.wait().map_err(|e| CoreError::Wrapper(format!("Failed to wait for child: {}", e)))?;
+        let status = child
+            .wait()
+            .map_err(|e| CoreError::Wrapper(format!("Failed to wait for child: {}", e)))?;
         let exit_code = status.exit_code();
 
         // Stop all monitoring
@@ -639,7 +642,9 @@ impl ProcessWrapper {
             }
         }
 
-        let status = cmd.status().map_err(|e| CoreError::Wrapper(format!("Failed to execute command: {}", e)))?;
+        let status = cmd
+            .status()
+            .map_err(|e| CoreError::Wrapper(format!("Failed to execute command: {}", e)))?;
 
         Ok(status.code().unwrap_or(-1))
     }

@@ -266,7 +266,12 @@ fn analyze_command(
                 RiskLevel::High => t("risk-high"),
                 RiskLevel::Critical => t("risk-crit-compact"),
             };
-            println!("[{}] {} {}", level_str, full_cmd, reason.map(t).unwrap_or_default());
+            println!(
+                "[{}] {} {}",
+                level_str,
+                full_cmd,
+                reason.map(t).unwrap_or_default()
+            );
         }
     }
 
@@ -280,12 +285,19 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     // Load config file if specified or use default
     let app_config = if let Some(ref path) = cli.config {
         Config::load_from_path(path).unwrap_or_else(|e| {
-            eprintln!("[agent-watch] Warning: Failed to load config from {}: {}, using defaults", path.display(), e);
+            eprintln!(
+                "[agent-watch] Warning: Failed to load config from {}: {}, using defaults",
+                path.display(),
+                e
+            );
             Config::default()
         })
     } else {
         Config::load().unwrap_or_else(|e| {
-            eprintln!("[agent-watch] Warning: Failed to load config: {}, using defaults", e);
+            eprintln!(
+                "[agent-watch] Warning: Failed to load config: {}, using defaults",
+                e
+            );
             Config::default()
         })
     };

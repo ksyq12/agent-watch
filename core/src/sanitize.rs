@@ -64,18 +64,23 @@ const SENSITIVE_ENV_PREFIXES: &[&str] = &[
 ];
 
 /// Pre-computed lowercase versions of sensitive flags
-static SENSITIVE_FLAGS_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
-    SENSITIVE_FLAGS.iter().map(|f| f.to_lowercase()).collect()
-});
+static SENSITIVE_FLAGS_LOWER: LazyLock<Vec<String>> =
+    LazyLock::new(|| SENSITIVE_FLAGS.iter().map(|f| f.to_lowercase()).collect());
 
 /// Pre-computed lowercase versions of sensitive inline flags
 static SENSITIVE_INLINE_FLAGS_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
-    SENSITIVE_INLINE_FLAGS.iter().map(|f| f.to_lowercase()).collect()
+    SENSITIVE_INLINE_FLAGS
+        .iter()
+        .map(|f| f.to_lowercase())
+        .collect()
 });
 
 /// Pre-computed lowercase versions of sensitive env prefixes
 static SENSITIVE_ENV_PREFIXES_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
-    SENSITIVE_ENV_PREFIXES.iter().map(|p| p.to_lowercase()).collect()
+    SENSITIVE_ENV_PREFIXES
+        .iter()
+        .map(|p| p.to_lowercase())
+        .collect()
 });
 
 /// Sanitize command arguments by masking sensitive information
@@ -107,8 +112,7 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 
         // Check for flags that indicate next arg is sensitive (case-insensitive)
         let arg_lower = arg.to_lowercase();
-        if SENSITIVE_FLAGS_LOWER.contains(&arg_lower)
-        {
+        if SENSITIVE_FLAGS_LOWER.contains(&arg_lower) {
             result.push(arg.clone());
             mask_next = true;
             continue;
@@ -153,7 +157,10 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 /// Mask inline flag=value patterns
 fn mask_inline_flag(arg: &str) -> Option<String> {
     let arg_lower = arg.to_lowercase();
-    for (prefix_lower, _original) in SENSITIVE_INLINE_FLAGS_LOWER.iter().zip(SENSITIVE_INLINE_FLAGS.iter()) {
+    for (prefix_lower, _original) in SENSITIVE_INLINE_FLAGS_LOWER
+        .iter()
+        .zip(SENSITIVE_INLINE_FLAGS.iter())
+    {
         if arg_lower.starts_with(prefix_lower.as_str()) {
             if let Some(eq_pos) = arg.find('=') {
                 let flag_part = &arg[..eq_pos];

@@ -163,9 +163,15 @@ pub struct CleanupResult {
 }
 
 /// Clean up old log files based on retention policy
-pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<CleanupResult, CoreError> {
+pub fn cleanup_old_logs(
+    log_dir: &PathBuf,
+    retention_days: u32,
+) -> Result<CleanupResult, CoreError> {
     if retention_days == 0 {
-        return Ok(CleanupResult { removed: 0, failed: 0 });
+        return Ok(CleanupResult {
+            removed: 0,
+            failed: 0,
+        });
     }
 
     let cutoff = Utc::now() - chrono::Duration::days(retention_days as i64);
@@ -173,7 +179,10 @@ pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<Cleanu
     let mut failed = 0;
 
     if !log_dir.exists() {
-        return Ok(CleanupResult { removed: 0, failed: 0 });
+        return Ok(CleanupResult {
+            removed: 0,
+            failed: 0,
+        });
     }
 
     for entry in std::fs::read_dir(log_dir)? {

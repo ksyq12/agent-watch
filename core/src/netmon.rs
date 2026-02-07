@@ -4,8 +4,8 @@
 //! Detects connections to non-whitelisted hosts.
 
 use crate::detector::{Detector, NetworkConnection, NetworkWhitelist};
-use crate::event::{Event, EventType};
 use crate::error::CoreError;
+use crate::event::{Event, EventType};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -389,7 +389,9 @@ impl NetworkMonitor {
                         continue;
                     }
 
-                    let Some(remote_addr) = extract_ip_address(&tcp.tcpsi_ini, tcp.tcpsi_ini.insi_vflag) else {
+                    let Some(remote_addr) =
+                        extract_ip_address(&tcp.tcpsi_ini, tcp.tcpsi_ini.insi_vflag)
+                    else {
                         continue;
                     };
 
@@ -455,9 +457,7 @@ mod libproc_safe {
     ///
     /// # Safety invariant
     /// Caller must have verified that `soi_kind` matches `SocketInfoKind::Tcp`.
-    pub fn tcp_info(
-        socket: &SocketInfo,
-    ) -> libproc::libproc::net_info::TcpSockInfo {
+    pub fn tcp_info(socket: &SocketInfo) -> libproc::libproc::net_info::TcpSockInfo {
         // SAFETY: Caller guarantees soi_kind is Tcp, so pri_tcp is the active variant.
         unsafe { socket.soi_proto.pri_tcp }
     }
@@ -466,9 +466,7 @@ mod libproc_safe {
     ///
     /// # Safety invariant
     /// Caller must have verified that `soi_kind` matches `SocketInfoKind::In`.
-    pub fn in_sock_info(
-        socket: &SocketInfo,
-    ) -> InSockInfo {
+    pub fn in_sock_info(socket: &SocketInfo) -> InSockInfo {
         // SAFETY: Caller guarantees soi_kind is In, so pri_in is the active variant.
         unsafe { socket.soi_proto.pri_in }
     }

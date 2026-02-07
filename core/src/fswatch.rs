@@ -4,8 +4,8 @@
 //! Detects file access patterns and integrates with sensitive file detection.
 
 use crate::detector::{Detector, SensitiveFileDetector};
-use crate::event::{Event, EventType, FileAction, RiskLevel};
 use crate::error::CoreError;
+use crate::event::{Event, EventType, FileAction, RiskLevel};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};

@@ -522,7 +522,11 @@ pub fn get_chart_data(
     path: String,
     bucket_minutes: u32,
 ) -> Result<Vec<FfiChartDataPoint>, FfiError> {
-    let bucket_minutes = if bucket_minutes == 0 { 60 } else { bucket_minutes };
+    let bucket_minutes = if bucket_minutes == 0 {
+        60
+    } else {
+        bucket_minutes
+    };
     let bucket_ms: i64 = bucket_minutes as i64 * 60 * 1000;
 
     let events = parse_events_from_file(&path)?;
@@ -620,9 +624,7 @@ pub fn search_events(
                 EventType::FileAccess { path, .. } => {
                     path.to_string_lossy().to_lowercase().contains(&query_lower)
                 }
-                EventType::Network { host, .. } => {
-                    host.to_lowercase().contains(&query_lower)
-                }
+                EventType::Network { host, .. } => host.to_lowercase().contains(&query_lower),
                 EventType::Process { .. } => false,
                 EventType::Session { .. } => false,
             }
@@ -638,11 +640,7 @@ pub fn get_latest_events(path: String, since_index: u32) -> Result<Vec<FfiEvent>
     let events = parse_events_from_file(&path)?;
     let since = since_index as usize;
 
-    let latest: Vec<FfiEvent> = events
-        .into_iter()
-        .skip(since)
-        .map(FfiEvent::from)
-        .collect();
+    let latest: Vec<FfiEvent> = events.into_iter().skip(since).map(FfiEvent::from).collect();
 
     Ok(latest)
 }
@@ -726,9 +724,7 @@ impl FfiMonitoringEngine {
 
         let session_id = logger.session_id().to_string();
 
-        *session = Some(MonitoringSession {
-            logger,
-        });
+        *session = Some(MonitoringSession { logger });
         *state = SessionState::Active;
 
         Ok(session_id)
