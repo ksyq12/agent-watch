@@ -15,7 +15,7 @@
 | 보안 | 0 | 0 | 2 | 8 |
 | 로깅/모니터링 | 0 | 0 | 2 | 8 |
 | 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ ~~6~~ 3 | ~~3~~ ~~5~~ 8 |
-| 프로젝트 구조 | 0 | 1 | ~~6~~ 5 | ~~5~~ 6 |
+| 프로젝트 구조 | 0 | 1 | ~~6~~ ~~5~~ 4 | ~~5~~ ~~6~~ 7 |
 | 아키텍처 설계 | 0 | 2 | ~~5~~ 3 | ~~10~~ 12 |
 | 의존성 관리 | 0 | 1 | ~~6~~ 4 | ~~7~~ 9 |
 | 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | 2 | ~~2~~ ~~5~~ 8 |
@@ -24,9 +24,9 @@
 | 데이터 영속성 | ~~2~~ 0 | ~~3~~ 2 | 4 | ~~5~~ ~~7~~ 8 |
 | 성능 최적화 | 0 | ~~3~~ 0 | ~~5~~ 4 | ~~2~~ ~~5~~ 6 |
 | 접근성/국제화 | ~~3~~ 0 | ~~4~~ 2 | 4 | ~~1~~ ~~4~~ 6 |
-| 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | 1 | ~~1~~ ~~2~~ 5 |
-| CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ ~~1~~ 0 | 3 | ~~2~~ ~~4~~ ~~5~~ ~~6~~ 7 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ 11** | **~~52~~ ~~50~~ ~~48~~ 43** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ 102** |
+| 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | ~~1~~ 0 | ~~1~~ ~~2~~ ~~5~~ 6 |
+| CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ ~~1~~ 0 | ~~3~~ 0 | ~~2~~ ~~4~~ ~~5~~ ~~6~~ ~~7~~ 10 |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ 11** | **~~52~~ ~~50~~ ~~48~~ ~~43~~ 38** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ ~~102~~ 107** |
 
 ---
 
@@ -125,13 +125,13 @@
 - ~~dead_code 허용 속성 정리 (`wrapper.rs:436`)~~ ✅ **해결**: `ffi.rs` `MonitoringSession.process_name` 미사용 필드 제거 (`#[allow(dead_code)]` 제거). `process_tracker.rs` `get_descendants` — `#[allow(dead_code)]` → `#[cfg(test)]`로 변경 (테스트 전용 코드 명시)
 - ~~crate-type에서 불필요한 `staticlib` 제거~~ ✅ **해결**: `core/Cargo.toml` `crate-type` — `["staticlib", "cdylib", "lib"]` → `["cdylib", "lib"]`. 빌드 시간 단축
 
-### 4.3 문서/인프라
+### 4.3 문서/인프라 — ✅ 조치 완료 (2026-02-07)
 
-- `README.md` 작성 (프로젝트 개요, 설치, 사용법)
-- `cargo audit` 정기 실행으로 취약점 모니터링
-- E2E 테스트 스크립트 추가
-- 환경별 빌드 프로파일 (`--profile release-prod`)
-- Code signing 팀 공유 설정
+- ~~`README.md` 작성 (프로젝트 개요, 설치, 사용법)~~ ✅ **해결**: 프로젝트 개요, CI/버전/라이선스 배지, 주요 기능 9개, 아키텍처 다이어그램 (Core←FFI←App), Quick Start, CLI 사용법 (옵션 테이블), config.toml 예시, 빌드 방법 (Rust/FFI/macOS), 개발 가이드 (make 명령어), 프로젝트 구조 트리, Tech Stack 테이블, Contributing, MIT License 포함
+- ~~`cargo audit` 정기 실행으로 취약점 모니터링~~ ✅ **해결**: `.github/workflows/ci.yml`에 `security` job 추가 (ci job과 병렬 실행). `cargo install cargo-audit --locked` + `cargo audit` 실행. Makefile에 `audit-install`, `audit` 타겟 추가
+- ~~E2E 테스트 스크립트 추가~~ ✅ **해결**: `scripts/e2e-test.sh` 생성 — 10개 E2E 테스트 (--help, version, analyze low/critical/JSON, wrapper echo, exit code 전파, 로그 디렉토리 생성, config 파일, no-color/no-timestamps). PASS/FAIL 컬러 출력, 요약 리포트. Makefile `e2e` 타겟 추가 (`make e2e`)
+- ~~환경별 빌드 프로파일 (`--profile release-prod`)~~ ✅ **해결**: `Cargo.toml`에 `[profile.release-prod]` 추가 — `inherits = "release"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"`. Makefile `build-prod` 타겟 추가 (`make build-prod`)
+- ~~Code signing 팀 공유 설정~~ ✅ **해결**: `app/MacAgentWatch/Signing.xcconfig` 생성 — `CODE_SIGN_STYLE`, `DEVELOPMENT_TEAM`, `CODE_SIGN_IDENTITY` 환경변수 기반 설정. `#include? "Local.xcconfig"` 로컬 오버라이드. `scripts/setup-signing.sh` — 대화형 Team ID/Identity 입력 → `Local.xcconfig` 자동 생성. `.gitignore`에 `Local.xcconfig` 추가
 
 ### 4.4 접근성/국제화
 
@@ -205,7 +205,7 @@
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🟡 Minor | 프로젝트 루트 | **`README.md` 파일 누락** | 프로젝트 개요, 설치, 사용법 포함 README 작성 |
+| 1 | ~~🟡 Minor~~ 🟢 | 프로젝트 루트 | ~~**`README.md` 파일 누락**~~ | ✅ README.md 작성 완료 — 배지, 주요 기능, 아키텍처, 설치/사용법, 설정, 프로젝트 구조, Tech Stack, Contributing |
 | 2 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:6` | ~~**버전 불일치** — workspace 0.2.0 vs Swift 0.3.0~~ | ✅ workspace version `"0.3.0"` 통일 완료 |
 | 3 | 🟢 Good | 전체 구조 | **Rust core, CLI, Swift app 3-tier 구조 명확** | 유지 |
 | 4 | 🟢 Good | `.gitignore` | **포괄적 작성** — Rust, Swift, FFI 산출물 모두 포함 | 유지 |
@@ -351,7 +351,7 @@
 | 2 | ~~🟠 Major~~ 🟢 | `core/src/fswatch.rs` | ~~**FSEvents 통합 테스트 부족**~~ | ✅ 5개 통합 테스트 추가 (파일 생성/수정 감지, signal_stop, 민감 파일, 다중 이벤트) |
 | 3 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs` | ~~**libproc 기반 로직 테스트 없음**~~ | ✅ 9개 통합 테스트 추가 (캐시 중복 제거/회전, 화이트리스트 필터링, 라이프사이클, PID 관리) |
 | 4 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs` | ~~**Orchestrator 통합 테스트 없음**~~ | ✅ 11개 통합 테스트 추가 (서브시스템 조합, 2단계 종료, 이벤트 전달, Wrapper 라이프사이클) |
-| 5 | 🟡 Minor | 전체 | **E2E 테스트 없음** | CLI → 앱 연동 테스트 스크립트 |
+| 5 | ~~🟡 Minor~~ 🟢 | 전체 | ~~**E2E 테스트 없음**~~ | ✅ `scripts/e2e-test.sh` 10개 E2E 테스트 추가 (CLI --help, version, analyze low/critical/JSON, wrapper echo, exit code, log-dir, config, no-color). Makefile `make e2e` 타겟 |
 | 6 | 🟢 Good | `core/src/` 전체 | **Rust core 206개 테스트** — 단위+통합 테스트, 엣지 케이스 포함 | 유지 |
 
 ### 6.14 CI/CD/빌드 설정 (Build Configuration)
@@ -364,8 +364,8 @@
 | 4 | ~~🟠 Major~~ 🟢 | `scripts/build-ffi.sh` | ~~**의존성 검증 없음** — uniffi-bindgen 등~~ | ✅ `cargo`, `rustc` 사전 검증 + 누락 시 설치 안내 메시지 출력 |
 | 5 | ~~🟠 Major~~ 🟢 | `core/Cargo.toml:10-11` | ~~**crate-type 3종 동시 빌드**~~ | ✅ `staticlib` 제거, `["cdylib", "lib"]`로 변경. 빌드 시간 단축 |
 | 6 | 🟡 Minor | `core/Cargo.toml` | **dev-dependencies tokio 미사용 가능** | 확인 후 제거 |
-| 7 | 🟡 Minor | 전체 | **환경 분리 없음** — DEV/STAGING/PROD | 빌드 프로파일 추가 권장 |
-| 8 | 🟡 Minor | Xcode 프로젝트 | **Code signing 팀 공유 설정 부재** | project.pbxproj 또는 환경변수 관리 |
+| 7 | ~~🟡 Minor~~ 🟢 | 전체 | ~~**환경 분리 없음** — DEV/STAGING/PROD~~ | ✅ `[profile.release-prod]` 추가 — `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"`. Makefile `make build-prod` 타겟 |
+| 8 | ~~🟡 Minor~~ 🟢 | Xcode 프로젝트 | ~~**Code signing 팀 공유 설정 부재**~~ | ✅ `Signing.xcconfig` 환경변수 기반 설정 + `Local.xcconfig` 로컬 오버라이드 + `scripts/setup-signing.sh` 자동 설정 스크립트 |
 | 9 | 🟢 Good | `.gitignore` | **잘 구성됨** — 빌드 아티팩트, 민감정보 제외 | 유지 |
 | 10 | 🟢 Good | `scripts/build-ffi.sh` | **UniFFI 빌드 체계적** — `set -euo pipefail` | 유지 |
 

@@ -39,6 +39,9 @@ app/MacAgentWatchCore/include/
 app/MacAgentWatchCore/generated/
 app/MacAgentWatch/MacAgentWatch/Generated/
 
+# Local signing config
+Local.xcconfig
+
 # Xcode
 xcuserdata/
 DerivedData/

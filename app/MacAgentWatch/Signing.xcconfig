@@ -1,0 +1,21 @@
+// Signing.xcconfig
+// Code signing configuration for MacAgentWatch
+//
+// For local development:
+//   Set environment variables or create a Local.xcconfig with overrides
+//
+// For CI:
+//   Set MACAGENTWATCH_DEVELOPMENT_TEAM and MACAGENTWATCH_CODE_SIGN_IDENTITY
+//   as environment variables in your CI workflow
+
+// Import local overrides if they exist
+#include? "Local.xcconfig"
+
+// Code signing defaults
+// Override these via environment variables or Local.xcconfig
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM = $(MACAGENTWATCH_DEVELOPMENT_TEAM)
+CODE_SIGN_IDENTITY = $(MACAGENTWATCH_CODE_SIGN_IDENTITY)
+
+// Product bundle identifier
+PRODUCT_BUNDLE_IDENTIFIER = com.macagentwatch.app

@@ -1,4 +1,4 @@
-.PHONY: all build build-release test lint fmt fmt-fix clean build-ffi build-ffi-debug build-app help
+.PHONY: all build build-release build-prod test lint fmt fmt-fix clean build-ffi build-ffi-debug build-app audit audit-install e2e help
 
 # Default target
 all: lint test build
@@ -10,6 +10,10 @@ build:
 # Build release
 build-release:
 	cargo build --release --workspace
+
+# Build production (maximum optimization)
+build-prod:
+	cargo build --profile release-prod --workspace
 
 # Run all tests
 test:
@@ -38,6 +42,18 @@ build-ffi-debug:
 build-app: build-ffi
 	xcodebuild -project app/MacAgentWatch/MacAgentWatch.xcodeproj -scheme MacAgentWatch -configuration Release build
 
+# Install cargo-audit
+audit-install:
+	cargo install cargo-audit --locked
+
+# Run security audit (install cargo-audit first: make audit-install)
+audit:
+	cargo audit
+
+# Run E2E tests
+e2e: build
+	bash scripts/e2e-test.sh
+
 # Clean all build artifacts
 clean:
 	cargo clean
@@ -50,11 +66,15 @@ help:
 	@echo "  make            - Run lint, test, build (default)"
 	@echo "  make build      - Build debug"
 	@echo "  make build-release - Build release"
+	@echo "  make build-prod - Build production (max optimization)"
 	@echo "  make test       - Run all tests"
 	@echo "  make lint       - Run clippy"
 	@echo "  make fmt        - Check formatting"
 	@echo "  make fmt-fix    - Fix formatting"
 	@echo "  make build-ffi  - Build FFI bindings (release)"
 	@echo "  make build-app  - Build Swift app"
+	@echo "  make audit-install - Install cargo-audit"
+	@echo "  make audit      - Run security audit"
+	@echo "  make e2e        - Run E2E tests"
 	@echo "  make clean      - Clean all artifacts"
 	@echo "  make help       - Show this help"
