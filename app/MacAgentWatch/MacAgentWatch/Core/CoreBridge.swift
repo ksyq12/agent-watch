@@ -5,6 +5,8 @@ import macagentwatch_core
 final class CoreBridge {
     static let shared = CoreBridge()
 
+    private var engine: FfiMonitoringEngine?
+
     private init() {}
 
     // MARK: - FFI Functions
@@ -66,6 +68,37 @@ final class CoreBridge {
         } catch {
             print("[CoreBridge] Warning: FFI getActivitySummary failed: \(error), using empty summary")
             return ActivitySummary()
+        }
+    }
+
+    // MARK: - Monitoring Engine Management
+
+    func startSession(processName: String) -> String? {
+        do {
+            if engine == nil { engine = FfiMonitoringEngine() }
+            let sessionId = try engine!.startSession(processName: processName)
+            return sessionId
+        } catch {
+            print("[CoreBridge] Warning: FFI startSession failed: \(error)")
+            return nil
+        }
+    }
+
+    func stopSession() -> Bool {
+        do {
+            try engine?.stopSession()
+            return true
+        } catch {
+            print("[CoreBridge] Warning: FFI stopSession failed: \(error)")
+            return false
+        }
+    }
+
+    func isEngineActive() -> Bool {
+        do {
+            return try engine?.isActive() ?? false
+        } catch {
+            return false
         }
     }
 

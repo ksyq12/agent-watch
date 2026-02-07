@@ -15,6 +15,8 @@ final class MonitoringViewModel {
     var config: AppConfig = AppConfig()
     var version: String = ""
     var filterRiskLevel: RiskLevel? = nil
+    var currentSessionId: String?
+    var errorMessage: String?
 
     private let bridge = CoreBridge.shared
 
@@ -26,19 +28,39 @@ final class MonitoringViewModel {
         version = bridge.getVersion()
         config = bridge.loadConfig()
         sessions = bridge.listSessionLogs()
-        events = CoreBridge.mockEvents
+        isMonitoring = bridge.isEngineActive()
+
+        if let latestSession = sessions.first {
+            events = bridge.readSessionLog(path: latestSession.filePath)
+            selectedSession = latestSession
+        } else {
+            events = []
+        }
+
         activitySummary = bridge.getActivitySummary(events: events)
         recentAlerts = events.filter { $0.alert }.prefix(5).map { $0 }
     }
 
     func startMonitoring() {
-        isMonitoring = true
-        // TODO: Real FFI monitoring engine start
+        errorMessage = nil
+        if let sessionId = bridge.startSession(processName: "MacAgentWatch") {
+            currentSessionId = sessionId
+            isMonitoring = true
+            sessions = bridge.listSessionLogs()
+        } else {
+            errorMessage = "Failed to start monitoring session"
+        }
     }
 
     func stopMonitoring() {
-        isMonitoring = false
-        // TODO: Real FFI monitoring engine stop
+        errorMessage = nil
+        if bridge.stopSession() {
+            isMonitoring = false
+            currentSessionId = nil
+            sessions = bridge.listSessionLogs()
+        } else {
+            errorMessage = "Failed to stop monitoring session"
+        }
     }
 
     func loadSession(_ session: SessionInfo) {

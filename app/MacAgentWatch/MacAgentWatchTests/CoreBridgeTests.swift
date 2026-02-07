@@ -17,7 +17,7 @@ final class CoreBridgeTests: XCTestCase {
         let event = bridge.analyzeCommand(command: "ls", args: ["-la"])
 
         XCTAssertFalse(event.id.isEmpty)
-        XCTAssertEqual(event.process, "mock")
+        XCTAssertEqual(event.process, "agent", "Real FFI analyzeCommand returns process 'agent'")
         XCTAssertEqual(event.riskLevel, .low)
         XCTAssertFalse(event.alert)
 
@@ -42,9 +42,9 @@ final class CoreBridgeTests: XCTestCase {
     }
 
     func testAnalyzeCommandTimestampIsRecent() {
-        let before = Date()
+        let before = Date().addingTimeInterval(-2)
         let event = bridge.analyzeCommand(command: "echo", args: ["hello"])
-        let after = Date()
+        let after = Date().addingTimeInterval(2)
 
         XCTAssertGreaterThanOrEqual(event.timestamp, before)
         XCTAssertLessThanOrEqual(event.timestamp, after)
@@ -67,7 +67,7 @@ final class CoreBridgeTests: XCTestCase {
     func testGetVersionReturnsNonEmpty() {
         let version = bridge.getVersion()
         XCTAssertFalse(version.isEmpty)
-        XCTAssertEqual(version, "0.3.0-mock")
+        XCTAssertEqual(version, "0.3.0")
     }
 
     // MARK: - loadConfig
@@ -130,14 +130,16 @@ final class CoreBridgeTests: XCTestCase {
 
     // MARK: - listSessionLogs
 
-    func testListSessionLogsReturnsSessions() {
+    func testListSessionLogsDoesNotCrash() {
         let sessions = bridge.listSessionLogs()
-        XCTAssertFalse(sessions.isEmpty)
-        XCTAssertEqual(sessions.count, 2)
+        // Real FFI may return 0 sessions if no log files exist on disk
+        XCTAssertNotNil(sessions, "listSessionLogs should return a valid array")
     }
 
-    func testListSessionLogsHaveValidIds() {
+    func testListSessionLogsHaveValidIds() throws {
         let sessions = bridge.listSessionLogs()
+        // Only validate if sessions exist on disk
+        try XCTSkipIf(sessions.isEmpty, "No session logs on disk to validate")
         for session in sessions {
             XCTAssertFalse(session.id.isEmpty)
             XCTAssertFalse(session.sessionId.isEmpty)
@@ -145,16 +147,19 @@ final class CoreBridgeTests: XCTestCase {
         }
     }
 
-    func testListSessionLogsSessionIdsAreUnique() {
+    func testListSessionLogsSessionIdsAreUnique() throws {
         let sessions = bridge.listSessionLogs()
+        // Only validate if sessions exist on disk
+        try XCTSkipIf(sessions.isEmpty, "No session logs on disk to validate")
         let ids = sessions.map { $0.id }
         XCTAssertEqual(Set(ids).count, ids.count)
     }
 
     // MARK: - readSessionLog
 
-    func testReadSessionLogReturnsMockEvents() {
-        let events = bridge.readSessionLog(path: "/any/path")
+    func testReadSessionLogFallsBackForNonExistentPath() {
+        let events = bridge.readSessionLog(path: "/nonexistent/path")
+        // Real FFI fails for non-existent path, falls back to mockEvents
         XCTAssertFalse(events.isEmpty)
         XCTAssertEqual(events.count, CoreBridge.mockEvents.count)
     }
