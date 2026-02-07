@@ -343,13 +343,14 @@ impl ProcessTracker {
 
     /// Get all descendant PIDs of a process (standalone version).
     /// Builds its own children map internally. Used by tests.
+    #[cfg(test)]
     #[cfg(target_os = "macos")]
-    #[allow(dead_code)]
     fn get_descendants(root_pid: u32, max_depth: Option<usize>) -> Vec<u32> {
         let children_map = Self::build_children_map();
         Self::get_descendants_from_map(&children_map, root_pid, max_depth)
     }
 
+    #[cfg(test)]
     #[cfg(not(target_os = "macos"))]
     fn get_descendants(_root_pid: u32, _max_depth: Option<usize>) -> Vec<u32> {
         Vec::new()
@@ -391,7 +392,7 @@ impl ProcessTracker {
 }
 
 impl crate::types::MonitoringSubsystem for ProcessTracker {
-    fn start(&mut self) -> anyhow::Result<()> {
+    fn start(&mut self) -> std::result::Result<(), crate::error::CoreError> {
         ProcessTracker::start(self);
         Ok(())
     }

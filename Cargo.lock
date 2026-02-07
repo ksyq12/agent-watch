@@ -737,7 +737,6 @@ dependencies = [
 name = "macagentwatch-core"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "chrono",
  "colored",
  "dirs",

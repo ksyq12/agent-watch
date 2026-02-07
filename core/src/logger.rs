@@ -123,68 +123,8 @@ impl Logger {
             parts.push(event.risk_level.text_label().to_string());
         }
 
-        // Event details
-        let details = match &event.event_type {
-            EventType::Command {
-                command,
-                args,
-                exit_code,
-            } => {
-                let cmd = if args.is_empty() {
-                    command.clone()
-                } else {
-                    format!("{} {}", command, args.join(" "))
-                };
-                let exit = exit_code
-                    .map(|c| format!(" (exit: {})", c))
-                    .unwrap_or_default();
-
-                if self.config.use_colors {
-                    match event.risk_level {
-                        RiskLevel::Critical => format!("{}{}", cmd.red().bold(), exit),
-                        RiskLevel::High => format!("{}{}", cmd.yellow().bold(), exit),
-                        RiskLevel::Medium => format!("{}{}", cmd.yellow(), exit),
-                        RiskLevel::Low => format!("{}{}", cmd, exit),
-                    }
-                } else {
-                    format!("{}{}", cmd, exit)
-                }
-            }
-            EventType::FileAccess { path, action } => {
-                let msg = format!("[{}] {}", action, path.display());
-                if self.config.use_colors && event.risk_level >= RiskLevel::High {
-                    msg.red().to_string()
-                } else {
-                    msg
-                }
-            }
-            EventType::Network {
-                host,
-                port,
-                protocol,
-            } => {
-                let msg = format!("[net] {}:{} ({})", host, port, protocol);
-                if self.config.use_colors {
-                    msg.blue().to_string()
-                } else {
-                    msg
-                }
-            }
-            EventType::Process { pid, ppid, action } => {
-                let ppid_str = ppid.map(|p| format!(" ppid:{}", p)).unwrap_or_default();
-                format!("[proc] {:?} pid:{}{}", action, pid, ppid_str)
-            }
-            EventType::Session { action } => {
-                let msg = format!("[session] {:?}", action);
-                if self.config.use_colors {
-                    msg.cyan().to_string()
-                } else {
-                    msg
-                }
-            }
-        };
-
-        parts.push(details);
+        // Event details - delegated to type-specific formatters
+        parts.push(self.format_event_details(event));
 
         // Alert indicator
         if event.alert {
@@ -197,6 +137,97 @@ impl Logger {
         }
 
         parts.join("  ")
+    }
+
+    fn format_event_details(&self, event: &Event) -> String {
+        match &event.event_type {
+            EventType::Command {
+                command,
+                args,
+                exit_code,
+            } => self.format_command_details(command, args, exit_code, event.risk_level),
+            EventType::FileAccess { path, action } => {
+                self.format_file_access_details(path, action, event.risk_level)
+            }
+            EventType::Network {
+                host,
+                port,
+                protocol,
+            } => self.format_network_details(host, *port, protocol),
+            EventType::Process { pid, ppid, action } => {
+                Self::format_process_details(*pid, ppid, action)
+            }
+            EventType::Session { action } => self.format_session_details(action),
+        }
+    }
+
+    fn format_command_details(
+        &self,
+        command: &str,
+        args: &[String],
+        exit_code: &Option<i32>,
+        risk_level: RiskLevel,
+    ) -> String {
+        let cmd = if args.is_empty() {
+            command.to_string()
+        } else {
+            format!("{} {}", command, args.join(" "))
+        };
+        let exit = exit_code
+            .map(|c| format!(" (exit: {})", c))
+            .unwrap_or_default();
+
+        if self.config.use_colors {
+            match risk_level {
+                RiskLevel::Critical => format!("{}{}", cmd.red().bold(), exit),
+                RiskLevel::High => format!("{}{}", cmd.yellow().bold(), exit),
+                RiskLevel::Medium => format!("{}{}", cmd.yellow(), exit),
+                RiskLevel::Low => format!("{}{}", cmd, exit),
+            }
+        } else {
+            format!("{}{}", cmd, exit)
+        }
+    }
+
+    fn format_file_access_details(
+        &self,
+        path: &std::path::Path,
+        action: &crate::event::FileAction,
+        risk_level: RiskLevel,
+    ) -> String {
+        let msg = format!("[{}] {}", action, path.display());
+        if self.config.use_colors && risk_level >= RiskLevel::High {
+            msg.red().to_string()
+        } else {
+            msg
+        }
+    }
+
+    fn format_network_details(&self, host: &str, port: u16, protocol: &str) -> String {
+        let msg = format!("[net] {}:{} ({})", host, port, protocol);
+        if self.config.use_colors {
+            msg.blue().to_string()
+        } else {
+            msg
+        }
+    }
+
+    fn format_process_details(
+        pid: u32,
+        ppid: &Option<u32>,
+        action: &crate::event::ProcessAction,
+    ) -> String {
+        let ppid_str = ppid.map(|p| format!(" ppid:{}", p)).unwrap_or_default();
+        format!("[proc] {:?} pid:{}{}", action, pid, ppid_str)
+    }
+
+    fn format_session_details(&self, action: &crate::event::SessionAction) -> String {
+        let msg = format!("[session] {:?}", action);
+        if self.config.use_colors {
+            msg.cyan().to_string()
+        } else {
+            msg
+        }
     }
 
     fn format_json(&self, event: &Event) -> String {

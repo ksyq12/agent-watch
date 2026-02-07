@@ -108,7 +108,7 @@ pub enum SessionAction {
 /// to provide a uniform interface for the `MonitoringOrchestrator`.
 pub trait MonitoringSubsystem: Send {
     /// Start the subsystem
-    fn start(&mut self) -> anyhow::Result<()>;
+    fn start(&mut self) -> std::result::Result<(), crate::error::CoreError>;
     /// Stop the subsystem, joining any internal threads
     fn stop(&mut self);
     /// Signal the subsystem to stop without blocking (for two-phase shutdown)

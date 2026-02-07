@@ -4,6 +4,7 @@
 //! such as passwords, API keys, and authentication tokens.
 
 use std::borrow::Cow;
+use std::sync::LazyLock;
 
 /// Mask placeholder for sensitive data
 const MASK: &str = "***";
@@ -62,6 +63,21 @@ const SENSITIVE_ENV_PREFIXES: &[&str] = &[
     "REFRESH_TOKEN=",
 ];
 
+/// Pre-computed lowercase versions of sensitive flags
+static SENSITIVE_FLAGS_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
+    SENSITIVE_FLAGS.iter().map(|f| f.to_lowercase()).collect()
+});
+
+/// Pre-computed lowercase versions of sensitive inline flags
+static SENSITIVE_INLINE_FLAGS_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
+    SENSITIVE_INLINE_FLAGS.iter().map(|f| f.to_lowercase()).collect()
+});
+
+/// Pre-computed lowercase versions of sensitive env prefixes
+static SENSITIVE_ENV_PREFIXES_LOWER: LazyLock<Vec<String>> = LazyLock::new(|| {
+    SENSITIVE_ENV_PREFIXES.iter().map(|p| p.to_lowercase()).collect()
+});
+
 /// Sanitize command arguments by masking sensitive information
 ///
 /// # Arguments
@@ -91,9 +107,9 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 
         // Check for flags that indicate next arg is sensitive (case-insensitive)
         let arg_lower = arg.to_lowercase();
-        if SENSITIVE_FLAGS
+        if SENSITIVE_FLAGS_LOWER
             .iter()
-            .any(|f| f.to_lowercase() == arg_lower)
+            .any(|f| *f == arg_lower)
         {
             result.push(arg.clone());
             mask_next = true;
@@ -138,9 +154,9 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 
 /// Mask inline flag=value patterns
 fn mask_inline_flag(arg: &str) -> Option<String> {
-    for prefix in SENSITIVE_INLINE_FLAGS {
-        if arg.to_lowercase().starts_with(&prefix.to_lowercase()) {
-            // Use find('=') for UTF-8 safe slicing
+    let arg_lower = arg.to_lowercase();
+    for (prefix_lower, _original) in SENSITIVE_INLINE_FLAGS_LOWER.iter().zip(SENSITIVE_INLINE_FLAGS.iter()) {
+        if arg_lower.starts_with(prefix_lower.as_str()) {
             if let Some(eq_pos) = arg.find('=') {
                 let flag_part = &arg[..eq_pos];
                 return Some(format!("{}={}", flag_part, MASK));
@@ -153,9 +169,8 @@ fn mask_inline_flag(arg: &str) -> Option<String> {
 /// Mask environment variable patterns
 fn mask_env_variable(arg: &str) -> Option<String> {
     let arg_lower = arg.to_lowercase();
-    for prefix in SENSITIVE_ENV_PREFIXES {
-        if arg_lower.starts_with(&prefix.to_lowercase()) {
-            // Use find('=') for UTF-8 safe slicing
+    for prefix_lower in SENSITIVE_ENV_PREFIXES_LOWER.iter() {
+        if arg_lower.starts_with(prefix_lower.as_str()) {
             if let Some(eq_pos) = arg.find('=') {
                 let var_name = &arg[..eq_pos];
                 return Some(format!("{}={}", var_name, MASK));
@@ -256,17 +271,18 @@ fn mask_url_credentials(arg: &str) -> Option<String> {
 /// Handles basic quoting (single and double quotes).
 pub fn sanitize_command_string(command: &str) -> Cow<'_, str> {
     // Check for common patterns that need sanitization
-    let needs_sanitization = SENSITIVE_FLAGS
+    let command_lower = command.to_lowercase();
+    let needs_sanitization = SENSITIVE_FLAGS_LOWER
         .iter()
-        .any(|f| command.to_lowercase().contains(&f.to_lowercase()))
+        .any(|f| command_lower.contains(f.as_str()))
         || command.contains("sk-ant-")
         || command.contains("sk-")
         || command.contains("ghp_")
         || command.contains("Bearer ")
         || command.contains("://")
-        || SENSITIVE_ENV_PREFIXES
+        || SENSITIVE_ENV_PREFIXES_LOWER
             .iter()
-            .any(|p| command.to_lowercase().contains(&p.to_lowercase()));
+            .any(|p| command_lower.contains(p.as_str()));
 
     if !needs_sanitization {
         return Cow::Borrowed(command);

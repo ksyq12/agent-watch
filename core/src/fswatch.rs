@@ -5,7 +5,7 @@
 
 use crate::detector::{Detector, SensitiveFileDetector};
 use crate::event::{Event, EventType, FileAction, RiskLevel};
-use anyhow::Result;
+use crate::error::CoreError;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -116,7 +116,7 @@ impl FileSystemWatcher {
 
     /// Start watching file system
     #[cfg(target_os = "macos")]
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> std::result::Result<(), CoreError> {
         if self.config.watch_paths.is_empty() {
             return Ok(());
         }
@@ -145,7 +145,7 @@ impl FileSystemWatcher {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> std::result::Result<(), CoreError> {
         // No-op on non-macOS platforms
         Ok(())
     }
@@ -290,7 +290,7 @@ impl FileSystemWatcher {
 }
 
 impl crate::types::MonitoringSubsystem for FileSystemWatcher {
-    fn start(&mut self) -> anyhow::Result<()> {
+    fn start(&mut self) -> std::result::Result<(), crate::error::CoreError> {
         FileSystemWatcher::start(self)
     }
 
@@ -316,7 +316,7 @@ impl Drop for FileSystemWatcher {
 /// Trait for file monitors (without Send constraint for flexibility)
 pub trait FileMonitor {
     /// Start monitoring
-    fn start(&mut self) -> Result<()>;
+    fn start(&mut self) -> std::result::Result<(), CoreError>;
     /// Stop monitoring
     fn stop(&mut self);
     /// Check if running
@@ -324,7 +324,7 @@ pub trait FileMonitor {
 }
 
 impl FileMonitor for FileSystemWatcher {
-    fn start(&mut self) -> Result<()> {
+    fn start(&mut self) -> std::result::Result<(), CoreError> {
         FileSystemWatcher::start(self)
     }
 

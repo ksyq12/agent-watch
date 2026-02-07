@@ -14,19 +14,19 @@
 |-----------|:-----------:|:--------:|:--------:|:-------:|
 | 보안 | 0 | 0 | 2 | 8 |
 | 로깅/모니터링 | 0 | 0 | 2 | 8 |
-| 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ 6 | ~~3~~ 5 |
+| 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ ~~6~~ 3 | ~~3~~ ~~5~~ 8 |
 | 프로젝트 구조 | 0 | 1 | ~~6~~ 5 | ~~5~~ 6 |
 | 아키텍처 설계 | 0 | 2 | ~~5~~ 3 | ~~10~~ 12 |
-| 의존성 관리 | 0 | 1 | 6 | 7 |
+| 의존성 관리 | 0 | 1 | ~~6~~ 4 | ~~7~~ 9 |
 | 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | 2 | ~~2~~ ~~5~~ 8 |
 | 동시성/스레드 안전성 | ~~3~~ 0 | ~~3~~ 1 | 2 | ~~0~~ ~~3~~ 5 |
 | 에러 처리 | ~~3~~ 0 | ~~3~~ 2 | 3 | ~~3~~ ~~6~~ 7 |
 | 데이터 영속성 | ~~2~~ 0 | ~~3~~ 2 | 4 | ~~5~~ ~~7~~ 8 |
-| 성능 최적화 | 0 | ~~3~~ 0 | 5 | ~~2~~ 5 |
+| 성능 최적화 | 0 | ~~3~~ 0 | ~~5~~ 4 | ~~2~~ ~~5~~ 6 |
 | 접근성/국제화 | ~~3~~ 0 | ~~4~~ 2 | 4 | ~~1~~ ~~4~~ 6 |
 | 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | 1 | ~~1~~ ~~2~~ 5 |
-| CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ 1 | 3 | ~~2~~ ~~4~~ ~~5~~ 6 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ 12** | **~~52~~ ~~50~~ 48** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ 96** |
+| CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ ~~1~~ 0 | 3 | ~~2~~ ~~4~~ ~~5~~ ~~6~~ 7 |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ 11** | **~~52~~ ~~50~~ ~~48~~ 43** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ 102** |
 
 ---
 
@@ -117,13 +117,13 @@
 - ~~데이터베이스 도입 검토 (JSONL → SQLite, 대량 이벤트 쿼리 성능)~~ ✅ **해결**: `SqliteStorage` 구현 (`rusqlite` bundled). events/sessions 테이블 + 인덱스. `EventQuery` 필터링 (risk_level, event_type, session_id, 시간 범위). `StorageBackend` 설정 (Jsonl/Sqlite/Both). 기존 JSONL 유지, 12개 테스트 추가
 - ~~타입을 별도 `types` 모듈로 분리하여 순환 의존성 예방~~ ✅ **해결**: `core/src/types.rs` 생성. RiskLevel, FileAction, ProcessAction, SessionAction 이동. event.rs에서 re-export로 하위 호환성 유지
 
-### 4.2 코드 품질
+### 4.2 코드 품질 — ✅ 조치 완료 (2026-02-07)
 
-- `anyhow` vs `thiserror` 사용 통일 (core는 thiserror만)
-- `logger.rs:format_pretty` 함수 복잡도 분리 (이벤트 타입별 포매터)
-- `sanitize.rs` `to_lowercase` 반복 호출 캐싱
-- dead_code 허용 속성 정리 (`wrapper.rs:436`)
-- crate-type에서 불필요한 `staticlib` 제거
+- ~~`anyhow` vs `thiserror` 사용 통일 (core는 thiserror만)~~ ✅ **해결**: core crate에서 `anyhow` 의존성 완전 제거. `wrapper.rs`, `fswatch.rs`, `netmon.rs`, `process_tracker.rs`, `types.rs`의 `anyhow::Result` → `CoreError` 기반 `Result` 전환. `.context()` → `.map_err(|e| CoreError::Wrapper(...))` 패턴 적용. CLI는 `anyhow` 유지 (application-level 적합)
+- ~~`logger.rs:format_pretty` 함수 복잡도 분리 (이벤트 타입별 포매터)~~ ✅ **해결**: `format_pretty`를 7개 메서드로 분리 — `format_event_details` (디스패처) + `format_command_details`, `format_file_access_details`, `format_network_details`, `format_process_details`, `format_session_details` (이벤트별 포매터). Cyclomatic Complexity 대폭 감소
+- ~~`sanitize.rs` `to_lowercase` 반복 호출 캐싱~~ ✅ **해결**: `std::sync::LazyLock`으로 `SENSITIVE_FLAGS_LOWER`, `SENSITIVE_INLINE_FLAGS_LOWER`, `SENSITIVE_ENV_PREFIXES_LOWER` 사전 계산 캐시 도입. `sanitize_args`, `mask_inline_flag`, `mask_env_variable`, `sanitize_command_string` 모두 캐시 사용으로 전환
+- ~~dead_code 허용 속성 정리 (`wrapper.rs:436`)~~ ✅ **해결**: `ffi.rs` `MonitoringSession.process_name` 미사용 필드 제거 (`#[allow(dead_code)]` 제거). `process_tracker.rs` `get_descendants` — `#[allow(dead_code)]` → `#[cfg(test)]`로 변경 (테스트 전용 코드 명시)
+- ~~crate-type에서 불필요한 `staticlib` 제거~~ ✅ **해결**: `core/Cargo.toml` `crate-type` — `["staticlib", "cdylib", "lib"]` → `["cdylib", "lib"]`. 빌드 시간 단축
 
 ### 4.3 문서/인프라
 
@@ -193,12 +193,12 @@
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🟡 Minor | `core/src/wrapper.rs:436` | **dead_code 허용 속성** — `process_name` 미사용 | 실제 활용하거나 제거 |
+| 1 | ~~🟡 Minor~~ 🟢 | `core/src/ffi.rs:454` | ~~**dead_code 허용 속성** — `process_name` 미사용~~ | ✅ `MonitoringSession.process_name` 미사용 필드 제거, `process_tracker.rs` `#[allow(dead_code)]` → `#[cfg(test)]` 변경 |
 | 2 | 🟡 Minor | `core/src/sanitize.rs:9` | **매직 상수** — MASK 값 "***" 하드코딩 | 표준 패턴이므로 유지 가능 |
 | 3 | 🟡 Minor | 여러 파일 | **테스트 커버리지 우수** — 각 모듈에 종합 테스트 | 통합 테스트 추가 고려 |
 | 4 | ~~🟠 Major~~ 🟢 | `app/.../CoreBridge.swift` | ~~**모든 FFI 함수가 TODO 상태** — mock 데이터 반환~~ | ✅ UniFFI 실제 연결 완료, 양방향 타입 변환 구현 |
-| 5 | 🟡 Minor | `core/src/logger.rs:106-196` | **`format_pretty` Cyclomatic Complexity 높음** | 이벤트 타입별 별도 포매터 함수로 분리 |
-| 6 | 🟡 Minor | 전체 Rust 코드 | **`anyhow` 사용 불일치** — 일부 모듈에서만 사용 | `CoreError` 사용으로 통일 권장 |
+| 5 | ~~🟡 Minor~~ 🟢 | `core/src/logger.rs:106-196` | ~~**`format_pretty` Cyclomatic Complexity 높음**~~ | ✅ 7개 메서드로 분리 — `format_event_details` (디스패처) + 5개 이벤트별 포매터 |
+| 6 | ~~🟡 Minor~~ 🟢 | 전체 Rust 코드 | ~~**`anyhow` 사용 불일치** — 일부 모듈에서만 사용~~ | ✅ core crate에서 `anyhow` 의존성 완전 제거. `CoreError` 기반 `Result` 통일 (CLI만 `anyhow` 유지) |
 | 7 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:7` | ~~**`edition = "2024"` 불안정** — nightly 전용~~ | ✅ `edition = "2021"` 변경 완료, let-chain 17개소 리팩토링 |
 
 ### 6.4 프로젝트 구조 (Project Structure)
@@ -240,11 +240,11 @@
 | 2 | 🟢 Good | `Cargo.toml:40` | **UniFFI 최신 버전** — `0.29` | 정기 업데이트 확인 |
 | 3 | 🟡 Minor | `Cargo.toml:39` | **fsevent 유지보수 상태 확인 필요** | `notify` 크로스 플랫폼 대안 검토 |
 | 4 | 🟢 Good | 전체 의존성 | **보안 취약점 없음** | `cargo audit` 정기 실행 |
-| 5 | 🟡 Minor | `Cargo.toml:18` | **anyhow + thiserror 중복** — 역할 분리는 명확 | 현재 구조 유지 가능 |
+| 5 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:18` | ~~**anyhow + thiserror 중복**~~ | ✅ core=thiserror, CLI=anyhow로 역할 완전 분리 |
 | 6 | 🟢 Good | 의존성 전체 | **불필요한 의존성 없음** | 유지 |
 | 7 | 🟢 Good | 전체 | **라이선스 호환성 양호** — MIT/Apache-2.0/MPL-2.0 호환 | `cargo-license` 정기 점검 |
 | 8 | 🟢 Good | `Cargo.toml:1-2` | **Workspace resolver = "2"** — 최신 resolver | 유지 |
-| 9 | 🟡 Minor | `core/Cargo.toml:10-11` | **crate-type 3종 동시 빌드** — 빌드 시간 증가 | `staticlib` 제거 고려 |
+| 9 | ~~🟡 Minor~~ 🟢 | `core/Cargo.toml:10-11` | ~~**crate-type 3종 동시 빌드** — 빌드 시간 증가~~ | ✅ `staticlib` 제거, `["cdylib", "lib"]`로 변경 |
 | 10 | 🟠 Major | `libproc`, `fsevent` | **macOS 전용 라이브러리** | 크로스 플랫폼 확장 시 대안 필요 |
 | 11 | 🟡 Minor | `core/Cargo.toml` dev-dependencies | **tokio 미사용 가능성** | 실제 사용 여부 확인 후 제거 |
 
@@ -318,7 +318,7 @@
 | 2 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:291-388` | ~~**PID당 반복 syscall** — 500ms 폴링으로 CPU 증가~~ | ✅ 폴링 간격 500ms → 1s 변경. CPU 사용량 50% 감소 |
 | 3 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs:498-515` | ~~**line_buffer String push/drain** — 재할당 빈번~~ | ✅ cursor 기반 추적으로 교체. 8KB 초과 시에만 compact, amortized O(1) |
 | 4 | 🟡 Minor | `core/src/detector.rs:73-106` | **`to_lowercase` 반복 호출** | 패턴 미리 소문자 변환, lazy_static 캐싱 |
-| 5 | 🟡 Minor | `core/src/sanitize.rs:82-133` | **sanitize_args 중복 `to_lowercase`** | 한 번만 변환 후 재사용 |
+| 5 | ~~🟡 Minor~~ 🟢 | `core/src/sanitize.rs:82-133` | ~~**sanitize_args 중복 `to_lowercase`**~~ | ✅ `LazyLock`으로 `SENSITIVE_FLAGS_LOWER` 등 3개 캐시 도입, 반복 호출 제거 |
 | 6 | 🟡 Minor | `core/src/storage.rs:126-130` | **매 이벤트 JSON 직렬화** | BufWriter 64KB 확대, 배치 처리 |
 | 7 | 🟡 Minor | `core/src/fswatch.rs:176-203` | **FSEvents recv_timeout(100ms)** — CPU 낭비 | latency 500ms 확대 |
 | 8 | 🟡 Minor | `app/.../MonitoringViewModel.swift:42-47` | **loadSession 전체 재계산** | 메타데이터 캐싱, 증분 업데이트 |
@@ -362,7 +362,7 @@
 | 2 | 🔴 Critical | 프로젝트 루트 | **Makefile 없음** | make test/build/build-ffi/clean 정의 |
 | 3 | ~~🟠 Major~~ 🟢 | `Cargo.toml:7` | ~~**`edition = "2024"` 불안정**~~ | ✅ `edition = "2021"` 변경 완료 |
 | 4 | ~~🟠 Major~~ 🟢 | `scripts/build-ffi.sh` | ~~**의존성 검증 없음** — uniffi-bindgen 등~~ | ✅ `cargo`, `rustc` 사전 검증 + 누락 시 설치 안내 메시지 출력 |
-| 5 | 🟠 Major | `core/Cargo.toml:10-11` | **crate-type 3종 동시 빌드** | staticlib 제거로 시간 단축 |
+| 5 | ~~🟠 Major~~ 🟢 | `core/Cargo.toml:10-11` | ~~**crate-type 3종 동시 빌드**~~ | ✅ `staticlib` 제거, `["cdylib", "lib"]`로 변경. 빌드 시간 단축 |
 | 6 | 🟡 Minor | `core/Cargo.toml` | **dev-dependencies tokio 미사용 가능** | 확인 후 제거 |
 | 7 | 🟡 Minor | 전체 | **환경 분리 없음** — DEV/STAGING/PROD | 빌드 프로파일 추가 권장 |
 | 8 | 🟡 Minor | Xcode 프로젝트 | **Code signing 팀 공유 설정 부재** | project.pbxproj 또는 환경변수 관리 |

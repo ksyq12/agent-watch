@@ -451,8 +451,6 @@ enum SessionState {
 
 struct MonitoringSession {
     logger: SessionLogger,
-    #[allow(dead_code)]
-    process_name: String,
 }
 
 #[derive(uniffi::Object)]
@@ -521,7 +519,6 @@ impl FfiMonitoringEngine {
 
         *session = Some(MonitoringSession {
             logger,
-            process_name,
         });
         *state = SessionState::Active;
 

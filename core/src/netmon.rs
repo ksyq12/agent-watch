@@ -5,7 +5,7 @@
 
 use crate::detector::{Detector, NetworkConnection, NetworkWhitelist};
 use crate::event::{Event, EventType};
-use anyhow::Result;
+use crate::error::CoreError;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -214,7 +214,7 @@ impl NetworkMonitor {
 
     /// Start monitoring
     #[cfg(target_os = "macos")]
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> std::result::Result<(), CoreError> {
         self.stop_flag.store(false, Ordering::Relaxed);
 
         let config = self.config.clone();
@@ -240,7 +240,7 @@ impl NetworkMonitor {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> std::result::Result<(), CoreError> {
         // No-op on non-macOS
         Ok(())
     }
@@ -522,7 +522,7 @@ impl NetworkMonitor {
 }
 
 impl crate::types::MonitoringSubsystem for NetworkMonitor {
-    fn start(&mut self) -> anyhow::Result<()> {
+    fn start(&mut self) -> std::result::Result<(), crate::error::CoreError> {
         NetworkMonitor::start(self)
     }
 
@@ -548,7 +548,7 @@ impl Drop for NetworkMonitor {
 /// Trait for network trackers
 pub trait NetworkTracker {
     /// Start tracking
-    fn start(&mut self) -> Result<()>;
+    fn start(&mut self) -> std::result::Result<(), CoreError>;
     /// Stop tracking
     fn stop(&mut self);
     /// Add a PID to track
@@ -560,7 +560,7 @@ pub trait NetworkTracker {
 }
 
 impl NetworkTracker for NetworkMonitor {
-    fn start(&mut self) -> Result<()> {
+    fn start(&mut self) -> std::result::Result<(), CoreError> {
         NetworkMonitor::start(self)
     }
 

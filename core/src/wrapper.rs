@@ -12,7 +12,7 @@ use crate::risk::RiskScorer;
 use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
 use crate::types::MonitoringSubsystem;
-use anyhow::{Context, Result};
+use crate::error::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -433,7 +433,7 @@ impl ProcessWrapper {
     }
 
     /// Run the wrapped process with PTY
-    pub fn run(&self) -> Result<i32> {
+    pub fn run(&self) -> std::result::Result<i32, CoreError> {
         let pty_system = native_pty_system();
 
         let pair = pty_system
@@ -443,7 +443,7 @@ impl ProcessWrapper {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .context("Failed to open PTY")?;
+            .map_err(|e| CoreError::Wrapper(format!("Failed to open PTY: {}", e)))?;
 
         let mut cmd = CommandBuilder::new(&self.config.command);
         cmd.args(&self.config.args);
@@ -460,7 +460,7 @@ impl ProcessWrapper {
         let mut child = pair
             .slave
             .spawn_command(cmd)
-            .context("Failed to spawn command")?;
+            .map_err(|e| CoreError::Wrapper(format!("Failed to spawn command: {}", e)))?;
 
         // Get child PID (platform-specific)
         let pid = child.process_id().unwrap_or(0);
@@ -484,11 +484,11 @@ impl ProcessWrapper {
         // Create reader for master output
         let mut reader = master
             .try_clone_reader()
-            .context("Failed to clone reader")?;
+            .map_err(|e| CoreError::Wrapper(format!("Failed to clone reader: {}", e)))?;
 
         // Forward stdin to the PTY
         let writer = Arc::new(Mutex::new(
-            master.take_writer().context("Failed to take writer")?,
+            master.take_writer().map_err(|e| CoreError::Wrapper(format!("Failed to take writer: {}", e)))?,
         ));
         let writer_clone = Arc::clone(&writer);
 
@@ -573,7 +573,7 @@ impl ProcessWrapper {
         });
 
         // Wait for the child process to exit
-        let status = child.wait().context("Failed to wait for child")?;
+        let status = child.wait().map_err(|e| CoreError::Wrapper(format!("Failed to wait for child: {}", e)))?;
         let exit_code = status.exit_code();
 
         // Stop all monitoring
@@ -598,7 +598,7 @@ impl ProcessWrapper {
     }
 
     /// Run a simple command without PTY (for testing or non-interactive use)
-    pub fn run_simple(&self) -> Result<i32> {
+    pub fn run_simple(&self) -> std::result::Result<i32, CoreError> {
         use std::process::{Command, Stdio};
 
         let mut cmd = Command::new(&self.config.command);
@@ -639,7 +639,7 @@ impl ProcessWrapper {
             }
         }
 
-        let status = cmd.status().context("Failed to execute command")?;
+        let status = cmd.status().map_err(|e| CoreError::Wrapper(format!("Failed to execute command: {}", e)))?;
 
         Ok(status.code().unwrap_or(-1))
     }
