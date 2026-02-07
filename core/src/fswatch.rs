@@ -8,7 +8,8 @@ use crate::event::{Event, EventType, FileAction, RiskLevel};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -75,7 +76,7 @@ pub struct FileSystemWatcher {
     config: FsWatchConfig,
     detector: SensitiveFileDetector,
     event_tx: Option<Sender<Event>>,
-    stop_flag: Arc<Mutex<bool>>,
+    stop_flag: Arc<AtomicBool>,
     watch_thread: Option<JoinHandle<()>>,
 }
 
@@ -86,7 +87,7 @@ impl FileSystemWatcher {
             config,
             detector: SensitiveFileDetector::default(),
             event_tx: None,
-            stop_flag: Arc::new(Mutex::new(false)),
+            stop_flag: Arc::new(AtomicBool::new(false)),
             watch_thread: None,
         }
     }
@@ -106,7 +107,7 @@ impl FileSystemWatcher {
 
     /// Check if watcher is running
     pub fn is_running(&self) -> bool {
-        self.watch_thread.is_some() && self.stop_flag.lock().map(|g| !*g).unwrap_or(false)
+        self.watch_thread.is_some() && !self.stop_flag.load(Ordering::Relaxed)
     }
 
     /// Start watching file system
@@ -116,9 +117,7 @@ impl FileSystemWatcher {
             return Ok(());
         }
 
-        if let Ok(mut flag) = self.stop_flag.lock() {
-            *flag = false;
-        }
+        self.stop_flag.store(false, Ordering::Relaxed);
 
         let paths: Vec<String> = self
             .config
@@ -154,7 +153,7 @@ impl FileSystemWatcher {
         _latency_secs: f64,
         event_tx: Option<Sender<Event>>,
         detector: SensitiveFileDetector,
-        stop_flag: Arc<Mutex<bool>>,
+        stop_flag: Arc<AtomicBool>,
     ) {
         // Channel for FSEvents
         let (fs_tx, fs_rx) = channel::<fsevent::Event>();
@@ -167,55 +166,66 @@ impl FileSystemWatcher {
             return;
         }
 
-        // Process events until stop
-        loop {
-            if stop_flag.lock().map(|g| *g).unwrap_or(true) {
-                break;
-            }
-
-            match fs_rx.recv_timeout(Duration::from_millis(100)) {
-                Ok(fse) => {
-                    let path = PathBuf::from(&fse.path);
-                    let action = Self::flags_to_action(fse.flag);
-
-                    let risk_level = if detector.is_sensitive(&path) {
-                        RiskLevel::Critical
-                    } else {
-                        RiskLevel::Low
-                    };
-
-                    let event = Event::new(
-                        EventType::FileAccess {
-                            path: path.clone(),
-                            action,
-                        },
-                        "fswatch".to_string(),
-                        std::process::id(),
-                        risk_level,
-                    );
-
-                    if let Some(ref tx) = event_tx {
-                        let _ = tx.send(event);
-                    }
+        // Use catch_unwind to ensure FSEvents cleanup even on panic (C6 fix)
+        let loop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            loop {
+                if stop_flag.load(Ordering::Relaxed) {
+                    break;
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-            }
-        }
 
-        // Shutdown FSEvents
+                match fs_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(fse) => {
+                        let path = PathBuf::from(&fse.path);
+                        let action = Self::flags_to_action(fse.flag);
+
+                        let risk_level = if detector.is_sensitive(&path) {
+                            RiskLevel::Critical
+                        } else {
+                            RiskLevel::Low
+                        };
+
+                        let event = Event::new(
+                            EventType::FileAccess {
+                                path: path.clone(),
+                                action,
+                            },
+                            "fswatch".to_string(),
+                            std::process::id(),
+                            risk_level,
+                        );
+
+                        if let Some(ref tx) = event_tx {
+                            let _ = tx.send(event);
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+        }));
+
+        // Always shutdown FSEvents, even after panic
         fs_event.shutdown_observe();
+
+        // Re-raise panic if one occurred
+        if let Err(panic_err) = loop_result {
+            std::panic::resume_unwind(panic_err);
+        }
     }
 
     /// Stop watching
     pub fn stop(&mut self) {
-        if let Ok(mut flag) = self.stop_flag.lock() {
-            *flag = true;
-        }
+        self.stop_flag.store(true, Ordering::Relaxed);
 
         if let Some(handle) = self.watch_thread.take() {
             let _ = handle.join();
         }
+    }
+
+    /// Signal the watcher to stop without waiting for the thread to finish.
+    /// Used by MonitoringOrchestrator for two-phase shutdown.
+    pub fn signal_stop(&self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
     }
 
     /// Convert FSEvents flags to FileAction

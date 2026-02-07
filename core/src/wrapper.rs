@@ -214,9 +214,24 @@ impl MonitoringOrchestrator {
         }
     }
 
-    /// Stop all monitoring subsystems gracefully
+    /// Stop all monitoring subsystems gracefully using two-phase shutdown.
+    /// Phase 1 signals all subsystems to stop (non-blocking), preventing new
+    /// events from being generated. Phase 2 joins all threads.
+    /// This avoids the race condition where events are lost because one
+    /// subsystem is still running while another is being torn down.
     fn stop(self) {
-        // Stop in reverse order of startup
+        // Phase 1: Signal all subsystems to stop (non-blocking)
+        if let Some((ref tracker, _)) = self.tracker {
+            tracker.signal_stop();
+        }
+        if let Some((ref watcher, _)) = self.fs_watcher {
+            watcher.signal_stop();
+        }
+        if let Some((ref monitor, _)) = self.net_monitor {
+            monitor.signal_stop();
+        }
+
+        // Phase 2: Stop subsystems and join all threads
         if let Some((mut tracker, handle)) = self.tracker {
             tracker.stop();
             let _ = handle.join();
@@ -367,7 +382,10 @@ pub struct ProcessWrapper {
     risk_scorer: RiskScorer,
     logger: Logger,
     event_tx: Option<Sender<WrapperEvent>>,
-    session_logger: Option<Arc<Mutex<SessionLogger>>>,
+    /// Session logger for persistent event storage.
+    /// Uses Mutex (not Arc) since it is only accessed from the main thread;
+    /// Mutex provides the interior mutability needed for &self methods.
+    session_logger: Option<Mutex<SessionLogger>>,
 }
 
 impl ProcessWrapper {
@@ -378,7 +396,7 @@ impl ProcessWrapper {
             // Pass None for session_id to auto-generate timestamp-based ID
             SessionLogger::new(dir, None)
                 .ok()
-                .map(|l| Arc::new(Mutex::new(l)))
+                .map(|l| Mutex::new(l))
         });
         Self {
             config,

@@ -8,6 +8,7 @@ use crate::event::{Event, EventType};
 use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -106,15 +107,52 @@ impl TrackedConnection {
     }
 }
 
+/// Two-generation cache for seen connections.
+/// When the current generation fills up, it rotates: the previous generation
+/// is discarded and the current becomes the previous. This avoids the
+/// "clear everything → duplicate event flood" problem.
+struct SeenConnectionsCache {
+    current: HashSet<TrackedConnection>,
+    previous: HashSet<TrackedConnection>,
+    max_size: usize,
+}
+
+impl SeenConnectionsCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            current: HashSet::new(),
+            previous: HashSet::new(),
+            max_size,
+        }
+    }
+
+    fn contains(&self, conn: &TrackedConnection) -> bool {
+        self.current.contains(conn) || self.previous.contains(conn)
+    }
+
+    fn insert(&mut self, conn: TrackedConnection) {
+        self.current.insert(conn);
+        if self.max_size > 0 && self.current.len() > self.max_size {
+            // Rotate: discard previous, current becomes previous
+            self.previous = std::mem::take(&mut self.current);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.current.clear();
+        self.previous.clear();
+    }
+}
+
 /// Network monitor using libproc
 pub struct NetworkMonitor {
     config: NetMonConfig,
     whitelist: NetworkWhitelist,
     event_tx: Option<Sender<Event>>,
-    stop_flag: Arc<Mutex<bool>>,
+    stop_flag: Arc<AtomicBool>,
     monitor_thread: Option<JoinHandle<()>>,
     tracked_pids: Arc<Mutex<HashSet<u32>>>,
-    seen_connections: Arc<Mutex<HashSet<TrackedConnection>>>,
+    seen_connections: Arc<Mutex<SeenConnectionsCache>>,
 }
 
 impl NetworkMonitor {
@@ -122,15 +160,16 @@ impl NetworkMonitor {
     pub fn new(config: NetMonConfig) -> Self {
         let mut tracked = HashSet::new();
         tracked.insert(config.root_pid);
+        let max_seen = config.max_seen_connections;
 
         Self {
             config,
             whitelist: NetworkWhitelist::default(),
             event_tx: None,
-            stop_flag: Arc::new(Mutex::new(false)),
+            stop_flag: Arc::new(AtomicBool::new(false)),
             monitor_thread: None,
             tracked_pids: Arc::new(Mutex::new(tracked)),
-            seen_connections: Arc::new(Mutex::new(HashSet::new())),
+            seen_connections: Arc::new(Mutex::new(SeenConnectionsCache::new(max_seen))),
         }
     }
 
@@ -170,15 +209,13 @@ impl NetworkMonitor {
 
     /// Check if running
     pub fn is_running(&self) -> bool {
-        self.monitor_thread.is_some() && self.stop_flag.lock().map(|g| !*g).unwrap_or(false)
+        self.monitor_thread.is_some() && !self.stop_flag.load(Ordering::Relaxed)
     }
 
     /// Start monitoring
     #[cfg(target_os = "macos")]
     pub fn start(&mut self) -> Result<()> {
-        if let Ok(mut flag) = self.stop_flag.lock() {
-            *flag = false;
-        }
+        self.stop_flag.store(false, Ordering::Relaxed);
 
         let config = self.config.clone();
         let whitelist = self.whitelist.clone();
@@ -210,12 +247,16 @@ impl NetworkMonitor {
 
     /// Stop monitoring
     pub fn stop(&mut self) {
-        if let Ok(mut flag) = self.stop_flag.lock() {
-            *flag = true;
-        }
+        self.stop_flag.store(true, Ordering::Relaxed);
         if let Some(handle) = self.monitor_thread.take() {
             let _ = handle.join();
         }
+    }
+
+    /// Signal the monitor to stop without waiting for the thread to finish.
+    /// Used by MonitoringOrchestrator for two-phase shutdown.
+    pub fn signal_stop(&self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
     }
 
     /// Main monitoring loop
@@ -224,12 +265,12 @@ impl NetworkMonitor {
         config: NetMonConfig,
         whitelist: NetworkWhitelist,
         event_tx: Option<Sender<Event>>,
-        stop_flag: Arc<Mutex<bool>>,
+        stop_flag: Arc<AtomicBool>,
         tracked_pids: Arc<Mutex<HashSet<u32>>>,
-        seen_connections: Arc<Mutex<HashSet<TrackedConnection>>>,
+        seen_connections: Arc<Mutex<SeenConnectionsCache>>,
     ) {
         loop {
-            if stop_flag.lock().map(|g| *g).unwrap_or(true) {
+            if stop_flag.load(Ordering::Relaxed) {
                 break;
             }
 
@@ -252,12 +293,6 @@ impl NetworkMonitor {
                             continue;
                         }
                         seen.insert(conn.clone());
-                        // Prevent unbounded growth
-                        if config.max_seen_connections > 0
-                            && seen.len() > config.max_seen_connections
-                        {
-                            seen.clear();
-                        }
                     }
 
                     // Determine risk level

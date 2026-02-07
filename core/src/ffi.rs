@@ -431,6 +431,15 @@ pub fn get_activity_summary(events: Vec<FfiEvent>) -> FfiActivitySummary {
 
 // ─── FfiMonitoringEngine Object ───────────────────────────────────────────────
 
+/// Session lifecycle state to prevent race conditions from concurrent start/stop calls
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SessionState {
+    Idle,
+    Starting,
+    Active,
+    Stopping,
+}
+
 struct MonitoringSession {
     logger: SessionLogger,
     #[allow(dead_code)]
@@ -439,7 +448,7 @@ struct MonitoringSession {
 
 #[derive(uniffi::Object)]
 pub struct FfiMonitoringEngine {
-    session: Mutex<Option<MonitoringSession>>,
+    state: Mutex<(SessionState, Option<MonitoringSession>)>,
 }
 
 #[uniffi::export]
@@ -447,59 +456,99 @@ impl FfiMonitoringEngine {
     #[uniffi::constructor]
     pub fn new() -> Self {
         FfiMonitoringEngine {
-            session: Mutex::new(None),
+            state: Mutex::new((SessionState::Idle, None)),
         }
     }
 
     pub fn start_session(&self, process_name: String) -> Result<String, FfiError> {
-        let config = Config::load().map_err(FfiError::from)?;
-        let log_dir = config.logging.effective_log_dir().map_err(FfiError::from)?;
+        // Acquire lock and check state atomically
+        let mut guard = self.state.lock().map_err(|e| FfiError::Other {
+            message: format!("FfiMonitoringEngine lock poisoned in start_session: {}", e),
+        })?;
 
-        let mut logger = SessionLogger::new(&log_dir, None).map_err(|e| FfiError::Storage {
-            message: format!("Failed to create session logger: {}", e),
+        let (ref mut state, ref mut session) = *guard;
+
+        // Only allow starting from Idle state
+        if *state != SessionState::Idle {
+            return Err(FfiError::Other {
+                message: format!("Cannot start session: engine is in {:?} state", state),
+            });
+        }
+
+        *state = SessionState::Starting;
+
+        let config = Config::load().map_err(|e| {
+            *state = SessionState::Idle;
+            FfiError::from(e)
+        })?;
+        let log_dir = config.logging.effective_log_dir().map_err(|e| {
+            *state = SessionState::Idle;
+            FfiError::from(e)
+        })?;
+
+        let mut logger = SessionLogger::new(&log_dir, None).map_err(|e| {
+            *state = SessionState::Idle;
+            FfiError::Storage {
+                message: format!("Failed to create session logger: {}", e),
+            }
         })?;
 
         logger
             .write_session_header(&process_name, std::process::id())
-            .map_err(|e| FfiError::Storage {
-                message: format!("Failed to write session header: {}", e),
+            .map_err(|e| {
+                *state = SessionState::Idle;
+                FfiError::Storage {
+                    message: format!("Failed to write session header: {}", e),
+                }
             })?;
 
         let session_id = logger.session_id().to_string();
 
-        let mut guard = self.session.lock().map_err(|e| FfiError::Other {
-            message: format!("Lock poisoned: {}", e),
-        })?;
-
-        *guard = Some(MonitoringSession {
+        *session = Some(MonitoringSession {
             logger,
             process_name,
         });
+        *state = SessionState::Active;
 
         Ok(session_id)
     }
 
     pub fn stop_session(&self) -> Result<(), FfiError> {
-        let mut guard = self.session.lock().map_err(|e| FfiError::Other {
-            message: format!("Lock poisoned: {}", e),
+        let mut guard = self.state.lock().map_err(|e| FfiError::Other {
+            message: format!("FfiMonitoringEngine lock poisoned in stop_session: {}", e),
         })?;
 
-        if let Some(mut session) = guard.take() {
-            session
-                .logger
+        let (ref mut state, ref mut session) = *guard;
+
+        // Only allow stopping from Active state
+        if *state != SessionState::Active {
+            return Err(FfiError::Other {
+                message: format!("Cannot stop session: engine is in {:?} state", state),
+            });
+        }
+
+        *state = SessionState::Stopping;
+
+        if let Some(mut s) = session.take() {
+            s.logger
                 .write_session_footer(Some(0))
-                .map_err(|e| FfiError::Storage {
-                    message: format!("Failed to write session footer: {}", e),
+                .map_err(|e| {
+                    *state = SessionState::Active;
+                    FfiError::Storage {
+                        message: format!("Failed to write session footer: {}", e),
+                    }
                 })?;
         }
+
+        *state = SessionState::Idle;
 
         Ok(())
     }
 
     pub fn is_active(&self) -> bool {
-        self.session
+        self.state
             .lock()
-            .map(|guard| guard.is_some())
+            .map(|guard| guard.0 == SessionState::Active)
             .unwrap_or(false)
     }
 }

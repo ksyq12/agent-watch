@@ -7,6 +7,7 @@ use crate::event::RiskLevel;
 use crate::risk::RiskScorer;
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -102,7 +103,7 @@ pub struct ProcessTracker {
     /// Event sender
     event_tx: Option<Sender<TrackerEvent>>,
     /// Stop flag
-    stop_flag: Arc<Mutex<bool>>,
+    stop_flag: Arc<AtomicBool>,
     /// Worker thread handle
     thread_handle: Option<JoinHandle<()>>,
 }
@@ -115,7 +116,7 @@ impl ProcessTracker {
             risk_scorer: RiskScorer::new(),
             tracked: Arc::new(Mutex::new(HashMap::new())),
             event_tx: None,
-            stop_flag: Arc::new(Mutex::new(false)),
+            stop_flag: Arc::new(AtomicBool::new(false)),
             thread_handle: None,
         }
     }
@@ -150,13 +151,17 @@ impl ProcessTracker {
 
     /// Stop the tracking thread
     pub fn stop(&mut self) {
-        if let Ok(mut flag) = self.stop_flag.lock() {
-            *flag = true;
-        }
+        self.stop_flag.store(true, Ordering::Relaxed);
 
         if let Some(handle) = self.thread_handle.take() {
             let _ = handle.join();
         }
+    }
+
+    /// Signal the tracker to stop without waiting for the thread to finish.
+    /// Used by MonitoringOrchestrator for two-phase shutdown.
+    pub fn signal_stop(&self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
     }
 
     /// Get currently tracked processes
@@ -181,13 +186,13 @@ impl ProcessTracker {
     fn tracking_loop(
         config: TrackerConfig,
         tracked: Arc<Mutex<HashMap<u32, TrackedProcess>>>,
-        stop_flag: Arc<Mutex<bool>>,
+        stop_flag: Arc<AtomicBool>,
         event_tx: Option<Sender<TrackerEvent>>,
         risk_scorer: RiskScorer,
     ) {
         loop {
             // Check stop flag
-            if stop_flag.lock().map(|f| *f).unwrap_or(false) {
+            if stop_flag.load(Ordering::Relaxed) {
                 break;
             }
 
