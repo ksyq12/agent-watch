@@ -259,7 +259,8 @@ impl MonitoringOrchestrator {
         let fs_rx = watcher.subscribe();
         let event_tx = event_tx.clone();
 
-        if watcher.start().is_err() {
+        if let Err(e) = watcher.start() {
+            eprintln!("[agent-watch] Warning: Failed to start file system watcher: {e}");
             return None;
         }
 
@@ -298,7 +299,8 @@ impl MonitoringOrchestrator {
         let net_rx = monitor.subscribe();
         let event_tx = event_tx.clone();
 
-        if monitor.start().is_err() {
+        if let Err(e) = monitor.start() {
+            eprintln!("[agent-watch] Warning: Failed to start network monitor: {e}");
             return None;
         }
 
@@ -394,9 +396,13 @@ impl ProcessWrapper {
         let logger = Logger::new(config.logger_config.clone());
         let session_logger = config.session_log_dir.as_ref().and_then(|dir| {
             // Pass None for session_id to auto-generate timestamp-based ID
-            SessionLogger::new(dir, None)
-                .ok()
-                .map(|l| Mutex::new(l))
+            match SessionLogger::new(dir, None) {
+                Ok(l) => Some(Mutex::new(l)),
+                Err(e) => {
+                    eprintln!("[agent-watch] Warning: Failed to create session logger: {e}");
+                    None
+                }
+            }
         });
         Self {
             config,

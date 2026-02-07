@@ -20,13 +20,13 @@
 | 의존성 관리 | 0 | 1 | 6 | 7 |
 | 메모리 관리 | ~~3~~ 0 | 3 | 2 | ~~2~~ 5 |
 | 동시성/스레드 안전성 | ~~3~~ 0 | 3 | 2 | ~~0~~ 3 |
-| 에러 처리 | 3 | 3 | 3 | 3 |
+| 에러 처리 | ~~3~~ 0 | 3 | 3 | ~~3~~ 6 |
 | 데이터 영속성 | 2 | 3 | 4 | 5 |
 | 성능 최적화 | 0 | 3 | 5 | 2 |
 | 접근성/국제화 | 3 | 4 | 4 | 1 |
 | 테스트 커버리지 | ~~1~~ 0 | 3 | 1 | ~~1~~ 2 |
 | CI/CD/빌드 | ~~2~~ 0 | 3 | 3 | ~~2~~ 4 |
-| **합계** | **~~17~~ ~~14~~ 8** | **30** | **52** | **~~57~~ ~~60~~ 66** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ 5** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ 69** |
 
 ---
 
@@ -51,13 +51,13 @@
 | ~~C8~~ | 메모리 | `core/src/netmon.rs` | ~~**seen_connections 전체 clear**~~ | ✅ **해결**: `SeenConnectionsCache` 세대별(generational) 캐시 구현. current/previous 2개 HashSet 사용, 용량 초과 시 이전 세대만 교체. 중복 이벤트 폭증 방지 |
 | ~~C9~~ | 메모리 | `core/src/wrapper.rs` | ~~**session_logger `Arc<Mutex>` 불필요한 복잡성**~~ | ✅ **해결**: `Option<Arc<Mutex<SessionLogger>>>` → `Option<Mutex<SessionLogger>>`. 불필요한 Arc 제거, 단일 스레드 사용 근거 문서화 |
 
-### 2.3 에러 처리
+### 2.3 에러 처리 — ✅ 조치 완료 (2026-02-07)
 
-| # | 영역 | 파일/위치 | 설명 | 권장 조치 |
+| # | 영역 | 파일/위치 | 설명 | 조치 결과 |
 |---|------|-----------|------|-----------|
-| C10 | 에러 | `core/src/wrapper.rs:379-381` | **SessionLogger 생성 실패를 조용히 무시** — 로깅 미작동을 사용자가 알 수 없음 | 실패 시 경고 로그 추가 또는 Result 반환 |
-| C11 | 에러 | `core/src/wrapper.rs:247-249` | **FSWatcher 시작 실패 무시** — 파일시스템 모니터링 비활성화 모를 수 있음 | 에러 로깅 또는 상위 전파 |
-| C12 | 에러 | `core/src/wrapper.rs:286-288` | **NetworkMonitor 시작 실패 무시** — 네트워크 모니터링 비활성화 모를 수 있음 | 에러 로깅 또는 상위 전파 |
+| ~~C10~~ | 에러 | `core/src/wrapper.rs:399-404` | ~~**SessionLogger 생성 실패를 조용히 무시**~~ | ✅ **해결**: `.ok()` → `match` 패턴으로 변경. 실패 시 `eprintln!("[agent-watch] Warning: Failed to create session logger: {e}")` 경고 출력 |
+| ~~C11~~ | 에러 | `core/src/wrapper.rs:262-265` | ~~**FSWatcher 시작 실패 무시**~~ | ✅ **해결**: `is_err()` → `if let Err(e)` 패턴으로 변경. 실패 시 `eprintln!("[agent-watch] Warning: Failed to start file system watcher: {e}")` 경고 출력 |
+| ~~C12~~ | 에러 | `core/src/wrapper.rs:302-305` | ~~**NetworkMonitor 시작 실패 무시**~~ | ✅ **해결**: `is_err()` → `if let Err(e)` 패턴으로 변경. 실패 시 `eprintln!("[agent-watch] Warning: Failed to start network monitor: {e}")` 경고 출력 |
 
 ### 2.4 데이터/영속성
 
@@ -278,9 +278,9 @@
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🔴 Critical | `core/src/wrapper.rs:379-381` | **SessionLogger 생성 실패 무시** | 경고 로그 또는 Result 반환 |
-| 2 | 🔴 Critical | `core/src/wrapper.rs:247-249` | **FSWatcher 시작 실패 무시** | 에러 로깅 또는 상위 전파 |
-| 3 | 🔴 Critical | `core/src/wrapper.rs:286-288` | **NetworkMonitor 시작 실패 무시** | 에러 로깅 또는 상위 전파 |
+| 1 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:399-404` | ~~**SessionLogger 생성 실패 무시**~~ | ✅ `match` 패턴 + `eprintln!` 경고 출력 |
+| 2 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:262-265` | ~~**FSWatcher 시작 실패 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
+| 3 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:302-305` | ~~**NetworkMonitor 시작 실패 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
 | 4 | 🟠 Major | `core/src/storage.rs:144-146` | **Drop flush 실패 무시** | `eprintln!` 경고 추가 |
 | 5 | 🟠 Major | `core/src/ffi.rs:470-472` | **Lock 실패 메시지 일반적** — "Lock poisoned" | 구체적 메시지로 변경 |
 | 6 | 🟠 Major | `core/src/netmon.rs:301` | **listpidinfo 실패 유형 미구분** | ESRCH vs EPERM 구분 |
@@ -389,11 +389,11 @@
 
 ### 프로덕션 배포 판단
 
-> **🔴 Critical ~~17건~~ → ~~14건~~ → 8건 해결 필요** (9건 조치 완료)
+> **🔴 Critical ~~17건~~ → ~~14건~~ → ~~8건~~ → 5건 해결 필요** (12건 조치 완료)
 > - ~~C1-C3: 인프라 (CI, Makefile, Swift 테스트)~~ ✅ 조치 완료
 > - ~~C4-C9: 동시성/메모리 안전성~~ ✅ 조치 완료
-> - C10-C12: 에러 처리 (조용한 실패 방지)
+> - ~~C10-C12: 에러 처리 (조용한 실패 방지)~~ ✅ 조치 완료
 > - C13-C14: 데이터 영속성 (flush 보장)
 > - C15-C17: 접근성/국제화
 
-다음 우선 과제: 에러 처리 (C10-C12) 및 데이터 영속성 (C13-C14) 개선.
+다음 우선 과제: 데이터 영속성 (C13-C14) 및 접근성/국제화 (C15-C17) 개선.
