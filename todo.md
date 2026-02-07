@@ -241,20 +241,55 @@
 - [x] `loadChartData()`, `pollLatestEvents()` 메서드
 - [x] 로컬라이제이션 35+ 신규 키 추가
 
-### v0.5.0
-- [ ] macOS 네이티브 알림
-  - [ ] UserNotifications 연동
-  - [ ] Critical/High 이벤트 알림
-- [ ] 설정 화면
-  - [ ] 민감 파일 패턴 관리
-  - [ ] 알림 설정
-  - [ ] 동기화 설정
-- [ ] 다크 모드 지원
-  - [ ] 시스템 테마 따르기
-  - [ ] 커스텀 컬러 스킴
-- [ ] 키보드 단축키
-  - [ ] 글로벌 단축키 설정
-  - [ ] 대시보드 내 네비게이션
+### v0.5.0 - ✅ 완료
+
+#### Rust FFI 확장 - ✅ 완료
+- [x] `save_config()` FFI 함수 (설정을 TOML로 저장)
+- [x] `FfiNotificationConfig` 레코드 타입 추가
+- [x] `get_notification_config()` / `save_notification_config()` FFI 함수
+- [x] `Config` 구조체에 `NotificationConfig` 섹션 추가 (`config.rs`)
+- [x] 설정 round-trip 테스트 (load → save → load)
+- [x] 버전 0.5.0 업데이트
+
+#### macOS 네이티브 알림 - ✅ 완료
+- [x] `NotificationManager.swift` 싱글턴 (122줄)
+- [x] UserNotifications 프레임워크 연동
+- [x] 알림 권한 요청 (`requestAuthorization()`)
+- [x] 알림 카테고리 등록 (CRITICAL_ALERT, HIGH_ALERT)
+- [x] 알림 액션 (View Details, Dismiss)
+- [x] 리스크 레벨별 알림 필터링 (minRiskLevel)
+- [x] Critical 이벤트용 critical sound 지원
+- [x] ViewModel에서 새 이벤트 수신 시 자동 알림 트리거
+- [x] UNUserNotificationCenterDelegate (포그라운드 표시, 액션 핸들링)
+
+#### 설정 화면 - ✅ 완료
+- [x] `SettingsView.swift` (275줄, 4탭 TabView)
+- [x] General 탭: 외관 (System/Light/Dark), 로깅 (활성화/보존 기간/포맷)
+- [x] Monitoring 탭: FSEvents/네트워크 토글, 폴링 간격, 감시 경로 편집
+- [x] Sensitive Files 탭: 기본 패턴 표시, 커스텀 패턴 추가/삭제, 네트워크 화이트리스트
+- [x] Notifications 탭: 알림 활성화, 최소 리스크 레벨, 사운드/배지 토글
+- [x] `MacAgentWatchApp`에 Settings scene 추가 (⌘, 자동 지원)
+- [x] `MenuBarView`에 "Preferences..." SettingsLink 추가
+- [x] ViewModel 설정 바인딩 프로퍼티 (loggingEnabled, logRetentionDays 등)
+- [x] `saveSettings()` → CoreBridge → FFI 설정 저장
+
+#### 다크 모드 지원 - ✅ 완료
+- [x] `AppTheme.swift` (67줄)
+- [x] `AppThemeMode` enum (system, light, dark)
+- [x] `AppColors` 시멘틱 컬러 시스템
+  - [x] `riskColor()` / `riskColorHighContrast()` - 리스크 레벨별
+  - [x] `eventTypeColor()` - 이벤트 타입별
+  - [x] `cardBackground`, `sidebarBackground`, `divider` 등 UI 컬러
+- [x] 기존 뷰 AppColors 적용 (EventRow, ActivityCards, Charts, MenuBar, LiveLog)
+- [x] `.preferredColorScheme()` 연동 (WindowGroup + Settings)
+- [x] `@AppStorage` 테마 설정 영속화
+
+#### 키보드 단축키 - ✅ 완료
+- [x] Monitor 메뉴 추가 (⌘⇧M 시작, ⌘⇧. 중지, ⌘R 새로고침)
+- [x] View 메뉴 확장 (⌘1 Events, ⌘2 Live Log, ⌘3 Charts)
+- [x] Settings scene (⌘, 설정 열기)
+- [x] ViewModel에 `selectedTab`, `isSearchFocused` 프로퍼티 추가
+- [x] `.commands {}` 블록으로 macOS 네이티브 메뉴 등록
 
 ---
 
@@ -368,15 +403,19 @@
 | UUID | uuid 1 (v4, serde) | ✅ |
 | FFI | UniFFI 0.29 | ✅ |
 
-**App (v0.4.0 완료)**
+**App (v0.5.0 완료)**
 | 구성 요소 | 기술 | 상태 |
 |-----------|------|------|
 | UI 프레임워크 | SwiftUI (macOS 14+) | ✅ |
 | 상태 관리 | @Observable (Swift 5.9+) | ✅ |
 | 메뉴바 | MenuBarExtra API | ✅ |
 | FFI 바인딩 | UniFFI 생성 Swift 코드 | ✅ |
-| FFI 실제 연결 | CoreBridge → FFI 호출 (11개 함수) | ✅ |
+| FFI 실제 연결 | CoreBridge → FFI 호출 (13개 함수) | ✅ |
 | Swift Charts | 활동 타임라인/리스크 분포/이벤트 타입 | ✅ |
+| 알림 | UserNotifications (macOS 네이티브) | ✅ |
+| 설정 | Settings scene (TabView 4탭) | ✅ |
+| 다크 모드 | AppTheme (System/Light/Dark) | ✅ |
+| 키보드 단축키 | Commands 메뉴 (Monitor/View) | ✅ |
 | CloudKit | (v0.6.0 예정) | ❌ |
 | Network.framework | (v0.8.0 예정) | ❌ |
 
@@ -386,14 +425,15 @@
 
 ### 빌드 & 테스트 현황 (2026-02-07 기준)
 - Rust 빌드: ✅ 성공 (Cargo workspace: `core`, `cli`)
-- Rust 테스트: ✅ **257개 통과** (core 242 + cli 15)
+- Rust 테스트: ✅ **266개 통과** (core 249 + cli 15 + doc 2)
 - Rust clippy: ✅ 경고 0개
-- 워크스페이스 버전: `0.4.0`
+- Rust fmt: ✅ 포맷 정상
+- 워크스페이스 버전: `0.5.0`
 - Rust edition: `2021`
 
-### 완료된 기능 (v0.1.0 + v0.2.0 + v0.3.0 + v0.4.0)
+### 완료된 기능 (v0.1.0 + v0.2.0 + v0.3.0 + v0.4.0 + v0.5.0)
 
-**Core 라이브러리** (`macagentwatch-core`, ~9,650줄)
+**Core 라이브러리** (`macagentwatch-core`, ~9,373줄)
 | 모듈 | 설명 | 줄 수 | 테스트 |
 |------|------|-------|--------|
 | `lib.rs` | 공개 API 내보내기, UniFFI 스캐폴딩 | 62 | 2 (doc) |
@@ -405,11 +445,11 @@
 | `fswatch.rs` | FSEvents 파일 모니터링 | ~250 | - |
 | `netmon.rs` | libproc 기반 TCP/UDP 네트워크 연결 추적 | ~300 | - |
 | `detector.rs` | 민감 데이터 탐지 (26개 기본 패턴, Detector trait) | 538 | 22 |
-| `config.rs` | TOML 설정 파일 파싱 | 402 | 17 |
+| `config.rs` | TOML 설정 파일 파싱 + NotificationConfig + save | 402+ | 17+ |
 | `storage.rs` | JSON Lines 세션 로깅 | 379 | 13 |
 | `sanitize.rs` | 자격 증명 마스킹 (API 키, 토큰, 비밀번호) | ~300 | 65+ |
 | `error.rs` | 구조화된 에러 타입 (thiserror 기반) | 110 | - |
-| `ffi.rs` | UniFFI FFI 레이어 (11 함수, 타입 변환) | ~1,510 | 70+ |
+| `ffi.rs` | UniFFI FFI 레이어 (13 함수 + FfiNotificationConfig) | ~1,600 | 80+ |
 
 **CLI 애플리케이션** (`macagentwatch`, ~400줄)
 - `macagentwatch -- <command>` : 프로세스 래핑 및 모니터링
@@ -432,50 +472,57 @@
 | `--log-dir <path>` | 로그 디렉토리 |
 | `--config <path>` | 설정 파일 경로 |
 
-**macOS 네이티브 앱** (`app/MacAgentWatch/`, SwiftUI)
+**macOS 네이티브 앱** (`app/MacAgentWatch/`, SwiftUI, 19파일 ~3,308줄)
 | 파일 | 설명 | 상태 |
 |------|------|------|
-| `MacAgentWatchApp.swift` | 앱 진입점 (`MenuBarExtra` + `WindowGroup`) | ✅ |
-| `CoreBridge.swift` | FFI 브릿지 싱글턴 (11개 FFI 함수 + 엔진 관리) | ✅ |
+| `MacAgentWatchApp.swift` | 앱 진입점 (MenuBarExtra + WindowGroup + Settings + Commands) | ✅ |
+| `CoreBridge.swift` | FFI 브릿지 싱글턴 (13개 FFI 함수 + 엔진 관리) | ✅ |
 | `MonitoringTypes.swift` | Swift 데이터 모델 (191줄, 11 타입) | ✅ |
-| `ConfigTypes.swift` | 설정 모델 | ✅ |
-| `MonitoringViewModel.swift` | `@Observable` 상태 관리 (165줄, 다중 필터) | ✅ |
-| `MenuBarView.swift` | 메뉴바 팝오버 UI | ✅ |
+| `ConfigTypes.swift` | 설정 모델 + NotificationConfig | ✅ |
+| `AppTheme.swift` | 다크 모드/시멘틱 컬러 (67줄) | ✅ v0.5.0 |
+| `NotificationManager.swift` | UserNotifications 관리자 (122줄) | ✅ v0.5.0 |
+| `MonitoringViewModel.swift` | `@Observable` 상태 관리 (300줄, 설정 바인딩) | ✅ |
+| `MenuBarView.swift` | 메뉴바 팝오버 UI + SettingsLink | ✅ |
 | `DashboardView.swift` | 대시보드 + 탭 전환 (Events/LiveLog/Charts) | ✅ |
-| `EventRowView.swift` | 이벤트 행 표시 | ✅ |
-| `EventDetailView.swift` | 이벤트 상세 inspector 패널 (311줄) | ✅ NEW |
-| `LiveLogView.swift` | 실시간 로그 뷰어 (259줄) | ✅ NEW |
-| `ChartsView.swift` | Swift Charts 통계 (229줄) | ✅ NEW |
-| `FilterBarView.swift` | 강화된 필터 (검색+날짜+타입, ~280줄) | ✅ |
+| `EventRowView.swift` | 이벤트 행 표시 (AppColors 적용) | ✅ |
+| `EventDetailView.swift` | 이벤트 상세 inspector 패널 (311줄) | ✅ |
+| `LiveLogView.swift` | 실시간 로그 뷰어 (AppColors 적용) | ✅ |
+| `ChartsView.swift` | Swift Charts 통계 (AppColors 적용) | ✅ |
+| `SettingsView.swift` | 설정 화면 4탭 (275줄) | ✅ v0.5.0 |
+| `FilterBarView.swift` | 강화된 필터 (검색+날짜+타입) | ✅ |
 | `SessionListView.swift` | 세션 사이드바 | ✅ |
-| `Generated/macagentwatch_core.swift` | UniFFI 생성 바인딩 | ✅ |
+| `ActivityCardsView.swift` | 활동 요약 카드 (AppColors 적용) | ✅ |
+| `AccessibilityPreviews.swift` | VoiceOver 프리뷰 | ✅ |
+| `Generated/macagentwatch_core.swift` | UniFFI 생성 바인딩 (2,201줄) | ✅ |
 
-### 다음 단계 (v0.5.0)
-- [ ] macOS 네이티브 알림 (UserNotifications, Critical/High 이벤트)
-- [ ] 설정 화면 UI (민감 파일 패턴, 알림, 동기화)
-- [ ] 다크 모드 지원 (시스템 테마 따르기)
-- [ ] 키보드 단축키 (글로벌 + 대시보드 네비게이션)
+### 다음 단계 (v0.6.0)
+- [ ] CloudKit 동기화 구현 (컨테이너, 로그/설정 동기화)
+- [ ] iOS 앱 기본 구조 (iOS 타겟, 공유 코드)
+- [ ] iOS 로그 뷰어 (읽기 전용, 필터링/검색)
 
-### 미구현 (v0.6.0+)
-- [ ] CloudKit 동기화 (v0.6.0)
-- [ ] iOS 앱 (v0.6.0)
+### 미구현 (v0.7.0+)
 - [ ] 푸시 알림 APNs (v0.7.0)
+- [ ] iPad 레이아웃 최적화 (v0.7.0)
 - [ ] 위젯 iOS/macOS (v0.8.0)
+- [ ] 로컬 네트워크 모드 (v0.8.0)
 - [ ] App Store 출시 (v1.0.0)
 
 ### 아키텍처 레이어
 ```
 ┌────────────────────────────────────────────────────┐
-│     Swift macOS App (SwiftUI)                      │
-│  MenuBarView ← MonitoringViewModel                 │
+│     Swift macOS App (SwiftUI, v0.5.0)              │
+│  MenuBarView ← MonitoringViewModel → Settings      │
 │  DashboardView (탭: Events / LiveLog / Charts)     │
-│  EventDetailView, EventRowView, ChartsView         │
-│  FilterBarView (검색+날짜+타입+리스크), SessionList │
+│  SettingsView (General/Monitoring/Sensitive/Notif)  │
+│  NotificationManager (UserNotifications)           │
+│  AppTheme (System/Light/Dark, 시멘틱 컬러)          │
+│  Commands 메뉴 (Monitor/View 단축키)               │
 └──────────────────┬─────────────────────────────────┘
-                   │ CoreBridge (11개 FFI 함수 + FfiMonitoringEngine)
+                   │ CoreBridge (13개 FFI 함수 + FfiMonitoringEngine)
 ┌──────────────────▼─────────────────────────────────┐
 │         UniFFI FFI Layer (ffi.rs)                  │
-│  FfiMonitoringEngine + 내보내기 함수 11개           │
+│  FfiMonitoringEngine + 내보내기 함수 13개           │
+│  save_config, FfiNotificationConfig                │
 │  페이지네이션, 차트 집계, 검색, 라이브 폴링         │
 │  타입 변환: Event→FfiEvent, Config→FfiConfig       │
 └──────────────────┬─────────────────────────────────┘
@@ -488,5 +535,6 @@
 │  └── NetworkMonitor (libproc TCP/UDP)              │
 │  RiskScorer (27규칙) + Detector (26패턴)            │
 │  SessionLogger (JSONL) + Sanitizer                 │
+│  Config (TOML + NotificationConfig + save)          │
 └────────────────────────────────────────────────────┘
 ```

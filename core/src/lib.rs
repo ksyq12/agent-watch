@@ -41,7 +41,8 @@ uniffi::setup_scaffolding!();
 
 // Re-export commonly used types
 pub use config::{
-    AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig, StorageBackend,
+    AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig, NotificationConfig,
+    StorageBackend,
 };
 pub use detector::{
     default_network_whitelist, default_sensitive_patterns, Detector, NetworkConnection,

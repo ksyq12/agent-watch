@@ -1,5 +1,4 @@
 import Foundation
-import macagentwatch_core
 
 @MainActor
 final class CoreBridge {
@@ -13,7 +12,7 @@ final class CoreBridge {
 
     func loadConfig() -> AppConfig {
         do {
-            let ffiConfig = try macagentwatch_core.loadConfig()
+            let ffiConfig = try MacAgentWatch.loadConfig()
             return Self.convertConfig(ffiConfig)
         } catch {
             print("[CoreBridge] Warning: FFI loadConfig failed: \(error), using mock")
@@ -23,7 +22,7 @@ final class CoreBridge {
 
     func analyzeCommand(command: String, args: [String]) -> MonitoringEvent {
         do {
-            let ffiEvent = try macagentwatch_core.analyzeCommand(command: command, args: args)
+            let ffiEvent = try MacAgentWatch.analyzeCommand(command: command, args: args)
             return Self.convertEvent(ffiEvent)
         } catch {
             print("[CoreBridge] Warning: FFI analyzeCommand failed: \(error), using fallback")
@@ -37,12 +36,12 @@ final class CoreBridge {
     }
 
     func getVersion() -> String {
-        return macagentwatch_core.getVersion()
+        return MacAgentWatch.getVersion()
     }
 
     func readSessionLog(path: String) -> [MonitoringEvent] {
         do {
-            let ffiEvents = try macagentwatch_core.readSessionLog(path: path)
+            let ffiEvents = try MacAgentWatch.readSessionLog(path: path)
             return ffiEvents.map { Self.convertEvent($0) }
         } catch {
             print("[CoreBridge] Warning: FFI readSessionLog failed: \(error), using mock")
@@ -52,7 +51,7 @@ final class CoreBridge {
 
     func listSessionLogs() -> [SessionInfo] {
         do {
-            let ffiSessions = try macagentwatch_core.listSessionLogs()
+            let ffiSessions = try MacAgentWatch.listSessionLogs()
             return ffiSessions.map { Self.convertSessionInfo($0) }
         } catch {
             print("[CoreBridge] Warning: FFI listSessionLogs failed: \(error), using mock")
@@ -63,7 +62,7 @@ final class CoreBridge {
     func getActivitySummary(events: [MonitoringEvent]) -> ActivitySummary {
         do {
             let ffiEvents = events.map { Self.convertToFfiEvent($0) }
-            let ffiSummary = try macagentwatch_core.getActivitySummary(events: ffiEvents)
+            let ffiSummary = try MacAgentWatch.getActivitySummary(events: ffiEvents)
             return Self.convertActivitySummary(ffiSummary)
         } catch {
             print("[CoreBridge] Warning: FFI getActivitySummary failed: \(error), using empty summary")
@@ -75,7 +74,7 @@ final class CoreBridge {
 
     func readSessionLogPaginated(path: String, offset: UInt32, limit: UInt32) -> [MonitoringEvent] {
         do {
-            let ffiEvents = try macagentwatch_core.readSessionLogPaginated(path: path, offset: offset, limit: limit)
+            let ffiEvents = try MacAgentWatch.readSessionLogPaginated(path: path, offset: offset, limit: limit)
             return ffiEvents.map { Self.convertEvent($0) }
         } catch {
             print("[CoreBridge] Warning: FFI readSessionLogPaginated failed: \(error)")
@@ -85,7 +84,7 @@ final class CoreBridge {
 
     func getSessionEventCount(path: String) -> Int {
         do {
-            let count = try macagentwatch_core.getSessionEventCount(path: path)
+            let count = try MacAgentWatch.getSessionEventCount(path: path)
             return Int(count)
         } catch {
             print("[CoreBridge] Warning: FFI getSessionEventCount failed: \(error)")
@@ -95,7 +94,7 @@ final class CoreBridge {
 
     func getChartData(path: String, bucketMinutes: UInt32 = 60) -> [ChartDataPoint] {
         do {
-            let ffiPoints = try macagentwatch_core.getChartData(path: path, bucketMinutes: bucketMinutes)
+            let ffiPoints = try MacAgentWatch.getChartData(path: path, bucketMinutes: bucketMinutes)
             return ffiPoints.map { Self.convertChartDataPoint($0) }
         } catch {
             print("[CoreBridge] Warning: FFI getChartData failed: \(error)")
@@ -112,7 +111,7 @@ final class CoreBridge {
         endTimeMs: Int64? = nil
     ) -> [MonitoringEvent] {
         do {
-            let ffiEvents = try macagentwatch_core.searchEvents(
+            let ffiEvents = try MacAgentWatch.searchEvents(
                 path: path,
                 query: query,
                 eventTypeFilter: eventTypeFilter,
@@ -129,11 +128,22 @@ final class CoreBridge {
 
     func getLatestEvents(path: String, sinceIndex: UInt32) -> [MonitoringEvent] {
         do {
-            let ffiEvents = try macagentwatch_core.getLatestEvents(path: path, sinceIndex: sinceIndex)
+            let ffiEvents = try MacAgentWatch.getLatestEvents(path: path, sinceIndex: sinceIndex)
             return ffiEvents.map { Self.convertEvent($0) }
         } catch {
             print("[CoreBridge] Warning: FFI getLatestEvents failed: \(error)")
             return []
+        }
+    }
+
+    // MARK: - v0.5.0 Config Save
+
+    func saveConfig(_ config: AppConfig) {
+        do {
+            let ffiConfig = Self.convertToFfiConfig(config)
+            try MacAgentWatch.saveConfig(config: ffiConfig)
+        } catch {
+            print("[CoreBridge] Warning: FFI saveConfig failed: \(error)")
         }
     }
 
@@ -142,7 +152,11 @@ final class CoreBridge {
     func startSession(processName: String) -> String? {
         do {
             if engine == nil { engine = FfiMonitoringEngine() }
-            let sessionId = try engine!.startSession(processName: processName)
+            guard let engine = engine else {
+                print("[CoreBridge] Warning: engine failed to initialize")
+                return nil
+            }
+            let sessionId = try engine.startSession(processName: processName)
             return sessionId
         } catch {
             print("[CoreBridge] Warning: FFI startSession failed: \(error)")
@@ -250,6 +264,10 @@ final class CoreBridge {
         config.monitoring.networkWhitelist = ffiConfig.monitoring.networkWhitelist
         config.alerts.minLevel = ffiConfig.alerts.minLevel
         config.alerts.customHighRisk = ffiConfig.alerts.customHighRisk
+        config.notifications.enabled = ffiConfig.notification.enabled
+        config.notifications.minRiskLevel = RiskLevel(rawValue: ffiConfig.notification.minRiskLevel) ?? .high
+        config.notifications.soundEnabled = ffiConfig.notification.soundEnabled
+        config.notifications.badgeEnabled = ffiConfig.notification.badgeEnabled
         return config
     }
 
@@ -353,6 +371,48 @@ final class CoreBridge {
             pid: event.pid,
             riskLevel: convertToFfiRiskLevel(event.riskLevel),
             alert: event.alert
+        )
+    }
+
+    // MARK: - Swift → FFI Config Conversion
+
+    private static func convertToFfiConfig(_ config: AppConfig) -> FfiConfig {
+        let general = FfiGeneralConfig(
+            verbose: config.general.verbose,
+            defaultFormat: config.general.defaultFormat
+        )
+        let logging = FfiLoggingConfig(
+            enabled: config.logging.enabled,
+            logDir: config.logging.logDir,
+            retentionDays: config.logging.retentionDays
+        )
+        let monitoring = FfiMonitoringConfig(
+            fsEnabled: config.monitoring.fsEnabled,
+            netEnabled: config.monitoring.netEnabled,
+            trackChildren: config.monitoring.trackChildren,
+            trackingPollMs: config.monitoring.trackingPollMs,
+            fsDebounceMs: config.monitoring.fsDebounceMs,
+            netPollMs: config.monitoring.netPollMs,
+            watchPaths: config.monitoring.watchPaths,
+            sensitivePatterns: config.monitoring.sensitivePatterns,
+            networkWhitelist: config.monitoring.networkWhitelist
+        )
+        let alerts = FfiAlertConfig(
+            minLevel: config.alerts.minLevel,
+            customHighRisk: config.alerts.customHighRisk
+        )
+        let notification = FfiNotificationConfig(
+            enabled: config.notifications.enabled,
+            minRiskLevel: config.notifications.minRiskLevel.rawValue,
+            soundEnabled: config.notifications.soundEnabled,
+            badgeEnabled: config.notifications.badgeEnabled
+        )
+        return FfiConfig(
+            general: general,
+            logging: logging,
+            monitoring: monitoring,
+            alerts: alerts,
+            notification: notification
         )
     }
 

@@ -101,12 +101,7 @@ struct LiveLogView: View {
                     }
                 }
             }
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                let atBottom = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 40
-                return atBottom
-            } action: { _, isAtBottom in
-                autoScroll = isAtBottom
-            }
+            .modifier(ScrollAutoScrollModifier(autoScroll: $autoScroll))
         }
     }
 
@@ -196,19 +191,9 @@ struct LiveLogView: View {
 
     private func riskColor(_ level: RiskLevel) -> Color {
         if contrast == .increased {
-            switch level {
-            case .low: return .green
-            case .medium: return .orange
-            case .high: return .red
-            case .critical: return .red
-            }
+            return AppColors.riskColorHighContrast(level)
         }
-        switch level {
-        case .low: return .green
-        case .medium: return .yellow
-        case .high: return .orange
-        case .critical: return .red
-        }
+        return AppColors.riskColor(level)
     }
 
     // MARK: - Mock Data
@@ -256,4 +241,23 @@ private struct MockLogEvent {
     let process: String
     let message: String
     let riskLevel: RiskLevel
+}
+
+private struct ScrollAutoScrollModifier: ViewModifier {
+    @Binding var autoScroll: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    let atBottom = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 40
+                    return atBottom
+                } action: { _, isAtBottom in
+                    autoScroll = isAtBottom
+                }
+        } else {
+            content
+                .onAppear { autoScroll = true }
+        }
+    }
 }

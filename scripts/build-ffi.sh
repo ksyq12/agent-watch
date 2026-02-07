@@ -4,6 +4,13 @@ set -euo pipefail
 # Build FFI artifacts for MacAgentWatch
 # Usage: bash scripts/build-ffi.sh [debug|release]
 
+# Ensure Rust toolchain is in PATH (Xcode strips user PATH)
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+elif [ -d "$HOME/.cargo/bin" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_MODE="${1:-release}"

@@ -76,17 +76,17 @@ struct MenuBarView: View {
                 summaryCard(
                     count: viewModel.activitySummary.criticalCount,
                     label: String(localized: "summary.critical"),
-                    color: .red
+                    color: AppColors.riskColor(.critical)
                 )
                 summaryCard(
                     count: viewModel.activitySummary.highCount,
                     label: String(localized: "summary.high"),
-                    color: .orange
+                    color: AppColors.riskColor(.high)
                 )
                 summaryCard(
                     count: viewModel.activitySummary.mediumCount,
                     label: String(localized: "summary.medium"),
-                    color: .yellow
+                    color: AppColors.riskColor(.medium)
                 )
             }
         }
@@ -175,6 +175,12 @@ struct MenuBarView: View {
             .accessibilityLabel(String(localized: "action.open.dashboard"))
             .accessibilityHint(String(localized: "app.dashboard.title"))
 
+            SettingsLink {
+                Label(String(localized: "action.preferences"), systemImage: "gearshape")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderless)
+
             Divider()
 
             Button(role: .destructive) {
@@ -192,11 +198,6 @@ struct MenuBarView: View {
     // MARK: - Helpers
 
     private func riskColor(_ level: RiskLevel) -> Color {
-        switch level {
-        case .low: return .green
-        case .medium: return .yellow
-        case .high: return .orange
-        case .critical: return .red
-        }
+        AppColors.riskColor(level)
     }
 }

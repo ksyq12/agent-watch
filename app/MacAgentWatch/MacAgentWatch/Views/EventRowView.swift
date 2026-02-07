@@ -94,20 +94,10 @@ struct EventRowView: View {
     // MARK: - Helpers
 
     private var riskColor: Color {
-        switch event.riskLevel {
-        case .low: return .green
-        case .medium: return .yellow
-        case .high: return .orange
-        case .critical: return .red
-        }
+        AppColors.riskColor(event.riskLevel)
     }
 
     private var riskColorHighContrast: Color {
-        switch event.riskLevel {
-        case .low: return .green
-        case .medium: return .orange
-        case .high: return .red
-        case .critical: return .red
-        }
+        AppColors.riskColorHighContrast(event.riskLevel)
     }
 }

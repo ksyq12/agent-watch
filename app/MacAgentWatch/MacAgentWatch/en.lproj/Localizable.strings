@@ -166,7 +166,81 @@
 "event.type.process" = "Process";
 "event.type.session" = "Session";
 
+// MARK: - Menu Commands
+"menu.monitor" = "Monitor";
+"menu.monitor.start" = "Start Monitoring";
+"menu.monitor.stop" = "Stop Monitoring";
+"menu.monitor.refresh" = "Refresh";
+"menu.view.events" = "Events";
+"menu.view.livelog" = "Live Log";
+"menu.view.charts" = "Charts";
+
+// MARK: - Appearance
+"settings.appearance.title" = "Appearance";
+"settings.appearance.system" = "System";
+"settings.appearance.light" = "Light";
+"settings.appearance.dark" = "Dark";
+"settings.appearance.description" = "Choose how MacAgentWatch looks";
+
 // MARK: - Event Detail Accessibility
 "a11y.detail.panel" = "Event detail panel";
 "a11y.detail.close" = "Close detail panel";
 "a11y.detail.copy" = "Copy %@ to clipboard";
+
+// MARK: - Settings
+"settings.title" = "Settings";
+"settings.tab.general" = "General";
+"settings.tab.monitoring" = "Monitoring";
+"settings.tab.sensitive" = "Sensitive Files";
+"settings.tab.notifications" = "Notifications";
+
+// General settings
+"settings.general.logging" = "Logging";
+"settings.general.logging.enabled" = "Enable Logging";
+"settings.general.logging.retention" = "Log Retention (days)";
+"settings.general.format" = "Default Output Format";
+"settings.general.format.pretty" = "Pretty";
+"settings.general.format.json" = "JSON";
+"settings.general.format.compact" = "Compact";
+
+// Monitoring settings
+"settings.monitoring.fsevents" = "File System Monitoring";
+"settings.monitoring.fsevents.enabled" = "Enable FSEvents";
+"settings.monitoring.network" = "Network Monitoring";
+"settings.monitoring.network.enabled" = "Enable Network Monitoring";
+"settings.monitoring.polling" = "Polling Interval (ms)";
+"settings.monitoring.watchpaths" = "Watch Paths";
+"settings.monitoring.watchpaths.add" = "Add Path";
+
+// Sensitive files settings
+"settings.sensitive.title" = "Sensitive File Patterns";
+"settings.sensitive.default" = "Default Patterns";
+"settings.sensitive.custom" = "Custom Patterns";
+"settings.sensitive.add" = "Add Pattern";
+"settings.sensitive.remove" = "Remove";
+"settings.sensitive.whitelist" = "Network Whitelist";
+"settings.sensitive.whitelist.add" = "Add Domain";
+
+// Notification settings
+"settings.notifications.enabled" = "Enable Notifications";
+"settings.notifications.minlevel" = "Minimum Alert Level";
+"settings.notifications.sound" = "Play Sound";
+"settings.notifications.badge" = "Show Badge";
+"settings.notifications.permission" = "Request Permission";
+
+// Actions
+"action.preferences" = "Preferences\U2026";
+"action.save" = "Save";
+"action.reset" = "Reset to Defaults";
+
+// MARK: - Notifications
+"notification.title.critical" = "Critical Alert";
+"notification.title.high" = "High Risk Alert";
+"notification.title.medium" = "Medium Risk";
+"notification.body.command" = "Command executed";
+"notification.body.file" = "File accessed";
+"notification.body.network" = "Network connection";
+"notification.action.view" = "View Details";
+"notification.action.dismiss" = "Dismiss";
+"notification.permission.title" = "Enable Notifications";
+"notification.permission.message" = "Get alerts for high-risk agent activities";

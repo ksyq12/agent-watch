@@ -19,25 +19,25 @@ struct ActivityCardsView: View {
                 title: String(localized: "summary.critical"),
                 count: summary.criticalCount,
                 icon: "xmark.octagon.fill",
-                color: .red
+                color: AppColors.riskColor(.critical)
             )
             activityCard(
                 title: String(localized: "summary.high"),
                 count: summary.highCount,
                 icon: "exclamationmark.octagon.fill",
-                color: .orange
+                color: AppColors.riskColor(.high)
             )
             activityCard(
                 title: String(localized: "summary.medium"),
                 count: summary.mediumCount,
                 icon: "exclamationmark.triangle.fill",
-                color: .yellow
+                color: AppColors.riskColor(.medium)
             )
             activityCard(
                 title: String(localized: "summary.low"),
                 count: summary.lowCount,
                 icon: "checkmark.circle.fill",
-                color: .green
+                color: AppColors.riskColor(.low)
             )
         }
     }

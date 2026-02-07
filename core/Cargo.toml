@@ -7,7 +7,7 @@ license.workspace = true
 description = "Core library for MacAgentWatch - AI agent monitoring"
 
 [lib]
-crate-type = ["cdylib", "lib"]
+crate-type = ["staticlib", "cdylib", "lib"]
 name = "macagentwatch_core"
 
 [[bin]]

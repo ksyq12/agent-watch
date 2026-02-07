@@ -25,16 +25,125 @@ final class MonitoringViewModel {
     var errorMessage: String?
     var chartData: [ChartDataPoint] = []
     var liveEventIndex: UInt32 = 0
+    var selectedTab: DetailTab = .events
+    var isSearchFocused: Bool = false
+
+    var selectedTheme: AppThemeMode {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "selectedTheme") ?? AppThemeMode.system.rawValue
+            return AppThemeMode(rawValue: raw) ?? .system
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "selectedTheme")
+        }
+    }
+
+    // MARK: - Settings Bindings
+
+    var loggingEnabled: Bool {
+        get { config.logging.enabled }
+        set { config.logging.enabled = newValue }
+    }
+
+    var logRetentionDays: UInt32 {
+        get { config.logging.retentionDays }
+        set { config.logging.retentionDays = newValue }
+    }
+
+    var defaultFormat: String {
+        get { config.general.defaultFormat }
+        set { config.general.defaultFormat = newValue }
+    }
+
+    var fsEventsEnabled: Bool {
+        get { config.monitoring.fsEnabled }
+        set { config.monitoring.fsEnabled = newValue }
+    }
+
+    var networkMonitorEnabled: Bool {
+        get { config.monitoring.netEnabled }
+        set { config.monitoring.netEnabled = newValue }
+    }
+
+    var trackingPollMs: UInt64 {
+        get { config.monitoring.trackingPollMs }
+        set { config.monitoring.trackingPollMs = newValue }
+    }
+
+    var watchPaths: [String] {
+        get { config.monitoring.watchPaths }
+        set { config.monitoring.watchPaths = newValue }
+    }
+
+    var sensitivePatterns: [String] {
+        get { config.monitoring.sensitivePatterns }
+        set { config.monitoring.sensitivePatterns = newValue }
+    }
+
+    var networkWhitelist: [String] {
+        get { config.monitoring.networkWhitelist }
+        set { config.monitoring.networkWhitelist = newValue }
+    }
+
+    var notificationSoundEnabled: Bool {
+        get { config.notifications.soundEnabled }
+        set {
+            config.notifications.soundEnabled = newValue
+            notificationManager.soundEnabled = newValue
+        }
+    }
+
+    var notificationBadgeEnabled: Bool {
+        get { config.notifications.badgeEnabled }
+        set {
+            config.notifications.badgeEnabled = newValue
+            notificationManager.badgeEnabled = newValue
+        }
+    }
+
+    var notificationMinRiskLevel: RiskLevel {
+        get { config.notifications.minRiskLevel }
+        set {
+            config.notifications.minRiskLevel = newValue
+            notificationManager.minRiskLevel = newValue
+        }
+    }
+
+    func saveSettings() {
+        bridge.saveConfig(config)
+        applyNotificationConfig()
+    }
 
     private let bridge = CoreBridge.shared
+    private let notificationManager = NotificationManager.shared
 
     init() {
         loadInitialData()
+        Task {
+            await notificationManager.requestAuthorization()
+            applyNotificationConfig()
+        }
+    }
+
+    var notificationsEnabled: Bool {
+        get { notificationManager.notificationsEnabled }
+        set {
+            notificationManager.notificationsEnabled = newValue
+            config.notifications.enabled = newValue
+        }
+    }
+
+    private func applyNotificationConfig() {
+        notificationManager.notificationsEnabled = config.notifications.enabled
+        notificationManager.minRiskLevel = config.notifications.minRiskLevel
+        notificationManager.soundEnabled = config.notifications.soundEnabled
+        notificationManager.badgeEnabled = config.notifications.badgeEnabled
     }
 
     func loadInitialData() {
         version = bridge.getVersion()
         config = bridge.loadConfig()
+        applyNotificationConfig()
         sessions = bridge.listSessionLogs()
         isMonitoring = bridge.isEngineActive()
 
@@ -67,6 +176,10 @@ final class MonitoringViewModel {
             trimEvents()
             activitySummary = bridge.getActivitySummary(events: events)
             recentAlerts = events.filter { $0.alert }.prefix(5).map { $0 }
+
+            for event in newEvents {
+                notificationManager.sendNotification(for: event)
+            }
         }
     }
 
@@ -117,6 +230,7 @@ final class MonitoringViewModel {
             recentAlerts.insert(event, at: 0)
             if recentAlerts.count > 5 { recentAlerts.removeLast() }
         }
+        notificationManager.sendNotification(for: event)
     }
 
     private func trimEvents() {

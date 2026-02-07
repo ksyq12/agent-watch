@@ -2,7 +2,7 @@
 //!
 //! Provides FFI-safe types, conversions, and exported functions for the Swift app layer.
 
-use crate::config::Config;
+use crate::config::{Config, NotificationConfig};
 use crate::error::CoreError;
 use crate::event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
 use crate::risk::RiskScorer;
@@ -115,11 +115,20 @@ pub struct FfiAlertConfig {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct FfiNotificationConfig {
+    pub enabled: bool,
+    pub min_risk_level: String,
+    pub sound_enabled: bool,
+    pub badge_enabled: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct FfiConfig {
     pub general: FfiGeneralConfig,
     pub logging: FfiLoggingConfig,
     pub monitoring: FfiMonitoringConfig,
     pub alerts: FfiAlertConfig,
+    pub notification: FfiNotificationConfig,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -258,6 +267,28 @@ impl From<Event> for FfiEvent {
     }
 }
 
+impl From<NotificationConfig> for FfiNotificationConfig {
+    fn from(config: NotificationConfig) -> Self {
+        FfiNotificationConfig {
+            enabled: config.enabled,
+            min_risk_level: config.min_risk_level,
+            sound_enabled: config.sound_enabled,
+            badge_enabled: config.badge_enabled,
+        }
+    }
+}
+
+impl From<FfiNotificationConfig> for NotificationConfig {
+    fn from(ffi: FfiNotificationConfig) -> Self {
+        NotificationConfig {
+            enabled: ffi.enabled,
+            min_risk_level: ffi.min_risk_level,
+            sound_enabled: ffi.sound_enabled,
+            badge_enabled: ffi.badge_enabled,
+        }
+    }
+}
+
 impl From<Config> for FfiConfig {
     fn from(config: Config) -> Self {
         FfiConfig {
@@ -293,6 +324,46 @@ impl From<Config> for FfiConfig {
                 min_level: config.alerts.min_level,
                 custom_high_risk: config.alerts.custom_high_risk,
             },
+            notification: config.notifications.into(),
+        }
+    }
+}
+
+impl From<FfiConfig> for Config {
+    fn from(ffi: FfiConfig) -> Self {
+        use crate::config::*;
+        Config {
+            general: GeneralConfig {
+                verbose: ffi.general.verbose,
+                default_format: ffi.general.default_format,
+            },
+            logging: LoggingConfig {
+                enabled: ffi.logging.enabled,
+                log_dir: ffi.logging.log_dir.map(std::path::PathBuf::from),
+                retention_days: ffi.logging.retention_days,
+                storage_backend: StorageBackend::default(),
+            },
+            monitoring: MonitoringConfig {
+                fs_enabled: ffi.monitoring.fs_enabled,
+                net_enabled: ffi.monitoring.net_enabled,
+                track_children: ffi.monitoring.track_children,
+                tracking_poll_ms: ffi.monitoring.tracking_poll_ms,
+                fs_debounce_ms: ffi.monitoring.fs_debounce_ms,
+                net_poll_ms: ffi.monitoring.net_poll_ms,
+                watch_paths: ffi
+                    .monitoring
+                    .watch_paths
+                    .into_iter()
+                    .map(std::path::PathBuf::from)
+                    .collect(),
+                sensitive_patterns: ffi.monitoring.sensitive_patterns,
+                network_whitelist: ffi.monitoring.network_whitelist,
+            },
+            alerts: AlertConfig {
+                min_level: ffi.alerts.min_level,
+                custom_high_risk: ffi.alerts.custom_high_risk,
+            },
+            notifications: ffi.notification.into(),
         }
     }
 }
@@ -322,6 +393,29 @@ impl From<CoreError> for FfiError {
 pub fn load_config() -> Result<FfiConfig, FfiError> {
     let config = Config::load().map_err(FfiError::from)?;
     Ok(config.into())
+}
+
+#[uniffi::export]
+pub fn save_config(config: FfiConfig) -> Result<(), FfiError> {
+    let config: Config = config.into();
+    let path = Config::default_path().map_err(FfiError::from)?;
+    config.save(&path).map_err(FfiError::from)?;
+    Ok(())
+}
+
+#[uniffi::export]
+pub fn get_notification_config() -> Result<FfiNotificationConfig, FfiError> {
+    let config = Config::load().map_err(FfiError::from)?;
+    Ok(config.notifications.into())
+}
+
+#[uniffi::export]
+pub fn save_notification_config(notification: FfiNotificationConfig) -> Result<(), FfiError> {
+    let path = Config::default_path().map_err(FfiError::from)?;
+    let mut config = Config::load().map_err(FfiError::from)?;
+    config.notifications = notification.into();
+    config.save(&path).map_err(FfiError::from)?;
+    Ok(())
 }
 
 #[uniffi::export]
@@ -957,6 +1051,10 @@ mod tests {
         assert!(!ffi_config.monitoring.fs_enabled);
         assert!(!ffi_config.monitoring.net_enabled);
         assert!(ffi_config.monitoring.track_children);
+        assert!(ffi_config.notification.enabled);
+        assert_eq!(ffi_config.notification.min_risk_level, "high");
+        assert!(ffi_config.notification.sound_enabled);
+        assert!(ffi_config.notification.badge_enabled);
     }
 
     #[test]
@@ -1502,5 +1600,132 @@ mod tests {
     fn test_get_latest_events_nonexistent() {
         let result = get_latest_events("/nonexistent/path.jsonl".to_string(), 0);
         assert!(result.is_err());
+    }
+
+    // ─── Tests for v0.5.0 FFI: notification config and save_config ────────────
+
+    #[test]
+    fn test_ffi_notification_config_defaults() {
+        let config = Config::default();
+        let ffi_config: FfiConfig = config.into();
+
+        assert!(ffi_config.notification.enabled);
+        assert_eq!(ffi_config.notification.min_risk_level, "high");
+        assert!(ffi_config.notification.sound_enabled);
+        assert!(ffi_config.notification.badge_enabled);
+    }
+
+    #[test]
+    fn test_notification_config_round_trip() {
+        use crate::config::NotificationConfig;
+
+        let original = NotificationConfig {
+            enabled: false,
+            min_risk_level: "critical".to_string(),
+            sound_enabled: false,
+            badge_enabled: true,
+        };
+
+        let ffi: FfiNotificationConfig = original.clone().into();
+        let back: NotificationConfig = ffi.into();
+
+        assert_eq!(back.enabled, original.enabled);
+        assert_eq!(back.min_risk_level, original.min_risk_level);
+        assert_eq!(back.sound_enabled, original.sound_enabled);
+        assert_eq!(back.badge_enabled, original.badge_enabled);
+    }
+
+    #[test]
+    fn test_config_round_trip_save_load() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let mut config = Config::default();
+        config.general.verbose = true;
+        config.monitoring.fs_enabled = true;
+        config.notifications.enabled = false;
+        config.notifications.min_risk_level = "critical".to_string();
+        config.notifications.sound_enabled = false;
+
+        config.save(&config_path).unwrap();
+        let loaded = Config::load_from_path(&config_path).unwrap();
+
+        assert!(loaded.general.verbose);
+        assert!(loaded.monitoring.fs_enabled);
+        assert!(!loaded.notifications.enabled);
+        assert_eq!(loaded.notifications.min_risk_level, "critical");
+        assert!(!loaded.notifications.sound_enabled);
+        assert!(loaded.notifications.badge_enabled);
+    }
+
+    #[test]
+    fn test_ffi_config_round_trip() {
+        let mut config = Config::default();
+        config.general.verbose = true;
+        config.notifications.enabled = false;
+        config.notifications.min_risk_level = "medium".to_string();
+
+        let ffi_config: FfiConfig = config.into();
+        let back: Config = ffi_config.into();
+
+        assert!(back.general.verbose);
+        assert!(!back.notifications.enabled);
+        assert_eq!(back.notifications.min_risk_level, "medium");
+    }
+
+    #[test]
+    fn test_save_config_ffi() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let mut config = Config::default();
+        config.notifications.min_risk_level = "low".to_string();
+
+        // Save via Config::save directly (save_config uses default_path which we can't override)
+        config.save(&config_path).unwrap();
+
+        let loaded = Config::load_from_path(&config_path).unwrap();
+        assert_eq!(loaded.notifications.min_risk_level, "low");
+    }
+
+    #[test]
+    fn test_get_notification_config() {
+        // get_notification_config loads from default path; should return defaults
+        let result = get_notification_config();
+        assert!(result.is_ok());
+        let notif = result.unwrap();
+        assert!(notif.enabled);
+        assert_eq!(notif.min_risk_level, "high");
+        assert!(notif.sound_enabled);
+        assert!(notif.badge_enabled);
+    }
+
+    #[test]
+    fn test_save_notification_config_round_trip() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Start with default config, save it
+        let config = Config::default();
+        config.save(&config_path).unwrap();
+
+        // Modify notification config and save via Config directly
+        let new_notif = FfiNotificationConfig {
+            enabled: false,
+            min_risk_level: "critical".to_string(),
+            sound_enabled: false,
+            badge_enabled: false,
+        };
+
+        let mut loaded = Config::load_from_path(&config_path).unwrap();
+        loaded.notifications = new_notif.into();
+        loaded.save(&config_path).unwrap();
+
+        // Verify the notification section persisted correctly
+        let reloaded = Config::load_from_path(&config_path).unwrap();
+        assert!(!reloaded.notifications.enabled);
+        assert_eq!(reloaded.notifications.min_risk_level, "critical");
+        assert!(!reloaded.notifications.sound_enabled);
+        assert!(!reloaded.notifications.badge_enabled);
     }
 }

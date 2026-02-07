@@ -162,10 +162,10 @@ struct ChartsView: View {
     }
 
     private var riskColorMapping: KeyValuePairs<String, Color> {
-        let criticalColor: Color = .red
-        let highColor: Color = contrast == .increased ? .red : .orange
-        let mediumColor: Color = contrast == .increased ? .orange : .yellow
-        let lowColor: Color = .green
+        let criticalColor = contrast == .increased ? AppColors.riskColorHighContrast(.critical) : AppColors.riskColor(.critical)
+        let highColor = contrast == .increased ? AppColors.riskColorHighContrast(.high) : AppColors.riskColor(.high)
+        let mediumColor = contrast == .increased ? AppColors.riskColorHighContrast(.medium) : AppColors.riskColor(.medium)
+        let lowColor = contrast == .increased ? AppColors.riskColorHighContrast(.low) : AppColors.riskColor(.low)
         return [
             String(localized: "risk.critical"): criticalColor,
             String(localized: "risk.high"): highColor,

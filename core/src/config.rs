@@ -20,6 +20,9 @@ pub struct Config {
     pub monitoring: MonitoringConfig,
     /// Alert settings
     pub alerts: AlertConfig,
+    /// Notification settings
+    #[serde(default)]
+    pub notifications: NotificationConfig,
 }
 
 impl Config {
@@ -262,6 +265,31 @@ impl MonitoringConfig {
     /// Get child process tracking poll duration
     pub fn tracking_poll_duration(&self) -> Duration {
         Duration::from_millis(self.tracking_poll_ms)
+    }
+}
+
+/// Notification configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationConfig {
+    /// Enable notifications
+    pub enabled: bool,
+    /// Minimum risk level to trigger notifications ("critical", "high", "medium", "low")
+    pub min_risk_level: String,
+    /// Enable notification sound
+    pub sound_enabled: bool,
+    /// Enable badge count
+    pub badge_enabled: bool,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_risk_level: "high".to_string(),
+            sound_enabled: true,
+            badge_enabled: true,
+        }
     }
 }
 

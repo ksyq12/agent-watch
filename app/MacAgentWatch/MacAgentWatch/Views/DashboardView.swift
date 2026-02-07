@@ -22,7 +22,6 @@ enum DetailTab: String, CaseIterable {
 
 struct DashboardView: View {
     @Bindable var viewModel: MonitoringViewModel
-    @State private var selectedTab: DetailTab = .events
 
     var body: some View {
         NavigationSplitView {
@@ -38,6 +37,7 @@ struct DashboardView: View {
                 }
             }
         }
+        .onExitCommand { viewModel.selectedEvent = nil }
         .navigationTitle(String(localized: "app.name"))
         .frame(minWidth: 800, minHeight: 500)
     }
@@ -62,7 +62,7 @@ struct DashboardView: View {
 
             Divider()
 
-            switch selectedTab {
+            switch viewModel.selectedTab {
             case .events:
                 eventsContent
             case .liveLog:
@@ -77,7 +77,7 @@ struct DashboardView: View {
 
     private var detailTabPicker: some View {
         HStack(spacing: 12) {
-            Picker(String(localized: "dashboard.tab"), selection: $selectedTab) {
+            Picker(String(localized: "dashboard.tab"), selection: $viewModel.selectedTab) {
                 ForEach(DetailTab.allCases, id: \.self) { tab in
                     Label(tab.label, systemImage: tab.icon).tag(tab)
                 }

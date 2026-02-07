@@ -28,9 +28,17 @@ struct AlertConfig {
     var customHighRisk: [String] = []
 }
 
+struct NotificationConfig {
+    var enabled: Bool = true
+    var minRiskLevel: RiskLevel = .high
+    var soundEnabled: Bool = true
+    var badgeEnabled: Bool = true
+}
+
 struct AppConfig {
     var general: GeneralConfig = GeneralConfig()
     var logging: LoggingConfig = LoggingConfig()
     var monitoring: MonitoringConfig = MonitoringConfig()
     var alerts: AlertConfig = AlertConfig()
+    var notifications: NotificationConfig = NotificationConfig()
 }

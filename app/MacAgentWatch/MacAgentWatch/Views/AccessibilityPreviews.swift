@@ -83,6 +83,8 @@ extension View {
 }
 
 // MARK: - Reduce Motion Preview
+// Note: accessibilityReduceMotion and colorSchemeContrast are read-only
+// environment values in macOS 15+. Test these via System Settings instead.
 
 #Preview("EventRowView - Reduce Motion") {
     let event = MonitoringEvent(
@@ -97,14 +99,12 @@ extension View {
     List {
         EventRowView(event: event)
     }
-    .environment(\.accessibilityReduceMotion, true)
 }
 
 // MARK: - High Contrast Preview
 
 #Preview("DashboardView - High Contrast") {
     DashboardView(viewModel: MonitoringViewModel())
-        .environment(\.colorSchemeContrast, .increased)
         .frame(width: 900, height: 600)
 }
 
@@ -121,7 +121,6 @@ extension View {
     List {
         EventRowView(event: event)
     }
-    .environment(\.colorSchemeContrast, .increased)
 }
 
 #endif
