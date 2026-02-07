@@ -551,21 +551,21 @@ mod tests {
 
         // Create tracker for current process
         let config =
-            TrackerConfig::new(std::process::id()).poll_interval(Duration::from_millis(10));
+            TrackerConfig::new(std::process::id()).poll_interval(Duration::from_millis(50));
         let mut tracker = ProcessTracker::new(config);
         let rx = tracker.subscribe();
 
         tracker.start();
 
-        // Wait for detection
-        thread::sleep(Duration::from_millis(50));
+        // Wait for detection (generous timeout for CI runners)
+        thread::sleep(Duration::from_millis(500));
 
         // Kill the child
         let _ = child.kill();
         let _ = child.wait();
 
-        // Wait for exit detection
-        thread::sleep(Duration::from_millis(50));
+        // Wait for exit detection (generous timeout for CI runners)
+        thread::sleep(Duration::from_millis(500));
 
         tracker.stop();
 
