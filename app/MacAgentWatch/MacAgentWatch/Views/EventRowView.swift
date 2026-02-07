@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventRowView: View {
     let event: MonitoringEvent
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 10) {
@@ -19,9 +20,10 @@ struct EventRowView: View {
     // MARK: - Risk Indicator
 
     private var riskIndicator: some View {
-        Circle()
-            .fill(riskColor)
-            .frame(width: 10, height: 10)
+        Image(systemName: event.riskLevel.icon)
+            .font(.caption)
+            .foregroundStyle(contrast == .increased ? riskColorHighContrast : riskColor)
+            .frame(width: 20)
             .accessibilityLabel(String(format: NSLocalizedString("a11y.risk.indicator", comment: ""), event.riskLevel.label))
     }
 
@@ -59,6 +61,7 @@ struct EventRowView: View {
 
     @ViewBuilder
     private var trailingInfo: some View {
+        let effectiveColor = contrast == .increased ? riskColorHighContrast : riskColor
         HStack(spacing: 6) {
             if event.alert {
                 Image(systemName: "bell.badge.fill")
@@ -71,14 +74,14 @@ struct EventRowView: View {
 
             Image(systemName: event.riskLevel.icon)
                 .font(.caption)
-                .foregroundStyle(riskColor)
+                .foregroundStyle(effectiveColor)
 
             Text(event.riskLevel.label)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(riskColor)
+                .foregroundStyle(effectiveColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(riskColor.opacity(0.12), in: Capsule())
+                .background(effectiveColor.opacity(0.12), in: Capsule())
         }
     }
 
@@ -89,6 +92,15 @@ struct EventRowView: View {
         case .low: return .green
         case .medium: return .yellow
         case .high: return .orange
+        case .critical: return .red
+        }
+    }
+
+    private var riskColorHighContrast: Color {
+        switch event.riskLevel {
+        case .low: return .green
+        case .medium: return .orange
+        case .high: return .red
         case .critical: return .red
         }
     }

@@ -32,7 +32,7 @@ impl Default for NetMonConfig {
     fn default() -> Self {
         Self {
             root_pid: std::process::id(),
-            poll_interval: Duration::from_millis(500),
+            poll_interval: Duration::from_secs(1),
             track_tcp: true,
             track_udp: true,
             max_seen_connections: 10_000,
@@ -571,7 +571,7 @@ mod tests {
     #[test]
     fn test_netmon_config_default() {
         let config = NetMonConfig::default();
-        assert_eq!(config.poll_interval, Duration::from_millis(500));
+        assert_eq!(config.poll_interval, Duration::from_secs(1));
         assert!(config.track_tcp);
         assert!(config.track_udp);
     }
@@ -732,5 +732,184 @@ mod tests {
 
         drop(monitor);
         // If this doesn't hang, drop worked correctly
+    }
+
+    // --- Integration tests ---
+
+    #[test]
+    fn test_seen_connections_cache_deduplication() {
+        let mut cache = SeenConnectionsCache::new(100);
+
+        let conn1 = TrackedConnection::new(1, "example.com".to_string(), 443, "tcp".to_string());
+        let conn2 = TrackedConnection::new(1, "example.com".to_string(), 443, "tcp".to_string());
+        let conn3 = TrackedConnection::new(1, "other.com".to_string(), 80, "tcp".to_string());
+
+        assert!(!cache.contains(&conn1));
+        cache.insert(conn1.clone());
+        assert!(cache.contains(&conn1));
+
+        // Duplicate connection should be detected
+        assert!(cache.contains(&conn2));
+
+        // Different connection should not be detected
+        assert!(!cache.contains(&conn3));
+        cache.insert(conn3.clone());
+        assert!(cache.contains(&conn3));
+    }
+
+    #[test]
+    fn test_seen_connections_cache_rotation() {
+        // Small max_size to trigger rotation
+        let mut cache = SeenConnectionsCache::new(2);
+
+        let conn1 = TrackedConnection::new(1, "a.com".to_string(), 80, "tcp".to_string());
+        let conn2 = TrackedConnection::new(1, "b.com".to_string(), 80, "tcp".to_string());
+        let conn3 = TrackedConnection::new(1, "c.com".to_string(), 80, "tcp".to_string());
+
+        cache.insert(conn1.clone());
+        cache.insert(conn2.clone());
+        assert!(cache.contains(&conn1));
+        assert!(cache.contains(&conn2));
+
+        // Inserting third triggers rotation (current becomes previous, current cleared)
+        cache.insert(conn3.clone());
+
+        // After rotation: previous = {conn1, conn2, conn3}, current = {}
+        // All three should still be found in previous
+        assert!(cache.contains(&conn1));
+        assert!(cache.contains(&conn2));
+        assert!(cache.contains(&conn3));
+    }
+
+    #[test]
+    fn test_seen_connections_cache_clear() {
+        let mut cache = SeenConnectionsCache::new(100);
+
+        let conn = TrackedConnection::new(1, "example.com".to_string(), 443, "tcp".to_string());
+        cache.insert(conn.clone());
+        assert!(cache.contains(&conn));
+
+        cache.clear();
+        assert!(!cache.contains(&conn));
+    }
+
+    #[test]
+    fn test_seen_connections_cache_unlimited() {
+        // max_size = 0 means unlimited, no rotation
+        let mut cache = SeenConnectionsCache::new(0);
+
+        for i in 0..100 {
+            let conn = TrackedConnection::new(1, format!("host{}.com", i), 80, "tcp".to_string());
+            cache.insert(conn);
+        }
+
+        // All 100 should still be in current (no rotation)
+        for i in 0..100 {
+            let conn = TrackedConnection::new(1, format!("host{}.com", i), 80, "tcp".to_string());
+            assert!(cache.contains(&conn));
+        }
+    }
+
+    #[test]
+    fn test_report_connection_with_whitelist_filtering() {
+        let config = NetMonConfig::default();
+        let whitelist = NetworkWhitelist::new(vec!["allowed.com".to_string()], vec![]);
+        let mut monitor = NetworkMonitor::new(config).with_whitelist(whitelist);
+        let rx = monitor.subscribe();
+
+        // Allowed host
+        let allowed_conn =
+            TrackedConnection::new(1, "allowed.com".to_string(), 443, "tcp".to_string());
+        monitor.report_connection(allowed_conn);
+
+        let event = rx.try_recv().unwrap();
+        assert_eq!(event.risk_level, RiskLevel::Medium);
+
+        // Non-whitelisted host
+        let blocked_conn =
+            TrackedConnection::new(1, "suspicious.xyz".to_string(), 8080, "tcp".to_string());
+        monitor.report_connection(blocked_conn);
+
+        let event = rx.try_recv().unwrap();
+        assert_eq!(event.risk_level, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_report_connection_deduplication() {
+        let config = NetMonConfig::default();
+        let mut monitor = NetworkMonitor::new(config);
+        let rx = monitor.subscribe();
+
+        let conn =
+            TrackedConnection::new(1, "test.example.com".to_string(), 443, "tcp".to_string());
+
+        // First report should generate an event
+        monitor.report_connection(conn.clone());
+        assert!(rx.try_recv().is_ok());
+
+        // Second report of same connection should be deduplicated
+        monitor.report_connection(conn.clone());
+        assert!(rx.try_recv().is_err());
+
+        // Clear seen connections and report again - should generate event
+        monitor.clear_seen_connections();
+        monitor.report_connection(conn);
+        assert!(rx.try_recv().is_ok());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_monitor_signal_stop() {
+        let config = NetMonConfig::new(std::process::id()).poll_interval(Duration::from_millis(50));
+        let mut monitor = NetworkMonitor::new(config);
+
+        monitor.start().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(monitor.is_running());
+
+        // signal_stop sets the flag without joining the thread
+        monitor.signal_stop();
+        assert!(!monitor.is_running());
+
+        // Full stop should work without hanging
+        monitor.stop();
+        assert!(!monitor.is_running());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_monitor_lifecycle_with_pid_management() {
+        let config =
+            NetMonConfig::new(std::process::id()).poll_interval(Duration::from_millis(100));
+        let mut monitor = NetworkMonitor::new(config);
+        let _rx = monitor.subscribe();
+
+        // Add extra PIDs before starting
+        monitor.add_pid(99999);
+        assert!(monitor.tracked_pids.lock().unwrap().contains(&99999));
+
+        monitor.start().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(monitor.is_running());
+
+        // Can add/remove PIDs while running
+        monitor.add_pid(99998);
+        assert!(monitor.tracked_pids.lock().unwrap().contains(&99998));
+
+        monitor.remove_pid(99999);
+        assert!(!monitor.tracked_pids.lock().unwrap().contains(&99999));
+
+        monitor.stop();
+        assert!(!monitor.is_running());
+    }
+
+    #[test]
+    fn test_max_seen_connections_config() {
+        let config = NetMonConfig::new(1).max_seen_connections(5);
+        let monitor = NetworkMonitor::new(config);
+
+        // Verify the cache was created with the configured max size
+        let seen = monitor.seen_connections.lock().unwrap();
+        assert_eq!(seen.max_size, 5);
     }
 }

@@ -204,6 +204,27 @@ impl ProcessTracker {
         }
     }
 
+    /// Build a parent→children map from all system PIDs using a single pass of
+    /// pidinfo syscalls. Returns the map keyed by parent PID.
+    #[cfg(target_os = "macos")]
+    fn build_children_map() -> HashMap<u32, Vec<u32>> {
+        let all_pids = match pids_by_type(ProcFilter::All) {
+            Ok(pids) => pids,
+            Err(_) => return HashMap::new(),
+        };
+
+        let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+        for pid in all_pids {
+            if pid == 0 {
+                continue;
+            }
+            if let Ok(info) = pidinfo::<BSDInfo>(pid as i32, 0) {
+                children_map.entry(info.pbi_ppid).or_default().push(pid);
+            }
+        }
+        children_map
+    }
+
     /// Scan for new and exited processes
     #[cfg(target_os = "macos")]
     fn scan_processes(
@@ -212,8 +233,12 @@ impl ProcessTracker {
         event_tx: &Option<Sender<TrackerEvent>>,
         risk_scorer: &RiskScorer,
     ) {
-        // Get all descendant PIDs
-        let descendants = Self::get_descendants(config.root_pid, config.max_depth);
+        // Build the children map once per scan (single pass of pidinfo syscalls)
+        let children_map = Self::build_children_map();
+
+        // Get all descendant PIDs using the pre-built map
+        let descendants =
+            Self::get_descendants_from_map(&children_map, config.root_pid, config.max_depth);
 
         // Phase 1: Find which PIDs are new and which have exited (short lock)
         let (new_pids, exited_pids) = {
@@ -283,32 +308,20 @@ impl ProcessTracker {
         // No-op on non-macOS platforms
     }
 
-    /// Get all descendant PIDs of a process
+    /// Get all descendant PIDs of a process using a pre-built children map.
+    /// This avoids redundant pidinfo syscalls when called from scan_processes,
+    /// which already builds the map once per scan cycle.
     #[cfg(target_os = "macos")]
-    fn get_descendants(root_pid: u32, max_depth: Option<usize>) -> Vec<u32> {
-        // Fetch all PIDs once and build a parent->children map
-        let all_pids = match pids_by_type(ProcFilter::All) {
-            Ok(pids) => pids,
-            Err(_) => return Vec::new(),
-        };
-
-        // Build HashMap: parent_pid -> Vec<child_pid>
-        let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
-        for pid in all_pids {
-            if pid == 0 {
-                continue;
-            }
-            if let Ok(info) = pidinfo::<BSDInfo>(pid as i32, 0) {
-                children_map.entry(info.pbi_ppid).or_default().push(pid);
-            }
-        }
-
-        // BFS using the pre-built map
+    fn get_descendants_from_map(
+        children_map: &HashMap<u32, Vec<u32>>,
+        root_pid: u32,
+        max_depth: Option<usize>,
+    ) -> Vec<u32> {
         let mut descendants = Vec::new();
         let mut to_visit = vec![(root_pid, 0usize)];
 
         while let Some((pid, depth)) = to_visit.pop() {
-            if max_depth.map(|max| depth > max).unwrap_or(false) {
+            if max_depth.is_some_and(|max| depth > max) {
                 continue;
             }
 
@@ -321,6 +334,15 @@ impl ProcessTracker {
         }
 
         descendants
+    }
+
+    /// Get all descendant PIDs of a process (standalone version).
+    /// Builds its own children map internally. Used by tests.
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
+    fn get_descendants(root_pid: u32, max_depth: Option<usize>) -> Vec<u32> {
+        let children_map = Self::build_children_map();
+        Self::get_descendants_from_map(&children_map, root_pid, max_depth)
     }
 
     #[cfg(not(target_os = "macos"))]

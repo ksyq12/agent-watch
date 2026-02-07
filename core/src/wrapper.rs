@@ -517,6 +517,9 @@ impl ProcessWrapper {
         let output_handle = thread::spawn(move || {
             let mut buffer = [0u8; 4096];
             let mut line_buffer = String::new();
+            // Cursor tracks how far into line_buffer we've already consumed,
+            // avoiding O(n) drain/shift on every newline.
+            let mut cursor: usize = 0;
 
             loop {
                 match reader.read(&mut buffer) {
@@ -533,11 +536,11 @@ impl ProcessWrapper {
                             let _ = tx.send(WrapperEvent::Stdout(chunk.to_string()));
                         }
 
-                        // Parse for commands — use drain for efficient string manipulation
+                        // Parse for commands using cursor-based approach
                         line_buffer.push_str(&chunk);
-                        while let Some(newline_pos) = line_buffer.find('\n') {
-                            let line: String = line_buffer.drain(..=newline_pos).collect();
-                            let line = line.trim_end_matches('\n');
+                        while let Some(rel_pos) = line_buffer[cursor..].find('\n') {
+                            let newline_pos = cursor + rel_pos;
+                            let line = &line_buffer[cursor..newline_pos];
 
                             // Simple command detection from shell prompts
                             if let Some(cmd) = Self::detect_command(line) {
@@ -550,6 +553,14 @@ impl ProcessWrapper {
                                     });
                                 }
                             }
+
+                            cursor = newline_pos + 1;
+                        }
+
+                        // Compact buffer when consumed portion exceeds 8KB
+                        if cursor > 8192 {
+                            line_buffer.drain(..cursor);
+                            cursor = 0;
                         }
                     }
                     Err(e) => {
@@ -854,5 +865,423 @@ mod tests {
             .risk_scorer
             .score("rm", &["-rf".to_string(), "/tmp/test".to_string()]);
         assert_eq!(level, RiskLevel::High);
+    }
+
+    // --- MonitoringOrchestrator integration tests ---
+
+    #[test]
+    fn test_orchestrator_no_subsystems() {
+        // When all subsystems are disabled, start/stop should work without error
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(false)
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let event_tx: Option<Sender<WrapperEvent>> = None;
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 0, &risk_scorer, &logger, &event_tx);
+
+        // All subsystems should be None
+        assert!(orchestrator.tracker.is_none());
+        assert!(orchestrator.fs_watcher.is_none());
+        assert!(orchestrator.net_monitor.is_none());
+
+        orchestrator.stop();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_with_tracker_only() {
+        let config = WrapperConfig::new("echo")
+            .track_children(true)
+            .tracking_poll_ms(50)
+            .enable_fswatch(false)
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, _rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let pid = std::process::id();
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, pid, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.tracker.is_some());
+        assert!(orchestrator.fs_watcher.is_none());
+        assert!(orchestrator.net_monitor.is_none());
+
+        // Let it run briefly
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Decompose and stop subsystems, dropping them before joining forwarding threads
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        if let Some((mut t, handle)) = tracker {
+            t.stop();
+            drop(t);
+            let _ = handle.join();
+        }
+        assert!(fs_watcher.is_none());
+        assert!(net_monitor.is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_with_fswatch_only() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(true)
+            .watch_paths(vec![temp_dir.path().to_path_buf()])
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, _rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 1, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.tracker.is_none());
+        assert!(orchestrator.fs_watcher.is_some());
+        assert!(orchestrator.net_monitor.is_none());
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Decompose, drop subsystem, then join forwarding thread
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        assert!(tracker.is_none());
+        assert!(net_monitor.is_none());
+        if let Some((mut w, handle)) = fs_watcher {
+            w.stop();
+            drop(w);
+            let _ = handle.join();
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_with_netmon_only() {
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(false)
+            .enable_netmon(true);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, _rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let pid = std::process::id();
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, pid, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.tracker.is_none());
+        assert!(orchestrator.fs_watcher.is_none());
+        assert!(orchestrator.net_monitor.is_some());
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Decompose, drop subsystem, then join forwarding thread
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        assert!(tracker.is_none());
+        assert!(fs_watcher.is_none());
+        if let Some((mut m, handle)) = net_monitor {
+            m.stop();
+            drop(m);
+            let _ = handle.join();
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_all_subsystems() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = WrapperConfig::new("echo")
+            .track_children(true)
+            .tracking_poll_ms(50)
+            .enable_fswatch(true)
+            .watch_paths(vec![temp_dir.path().to_path_buf()])
+            .enable_netmon(true);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, _rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let pid = std::process::id();
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, pid, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.tracker.is_some());
+        assert!(orchestrator.fs_watcher.is_some());
+        assert!(orchestrator.net_monitor.is_some());
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Phase 1: Signal all to stop
+        if let Some((ref t, _)) = orchestrator.tracker {
+            t.signal_stop();
+        }
+        if let Some((ref w, _)) = orchestrator.fs_watcher {
+            w.signal_stop();
+        }
+        if let Some((ref m, _)) = orchestrator.net_monitor {
+            m.signal_stop();
+        }
+
+        // Phase 2: Stop and drop each subsystem, then join forwarding thread
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        if let Some((mut t, handle)) = tracker {
+            t.stop();
+            drop(t);
+            let _ = handle.join();
+        }
+        if let Some((mut w, handle)) = fs_watcher {
+            w.stop();
+            drop(w);
+            let _ = handle.join();
+        }
+        if let Some((mut m, handle)) = net_monitor {
+            m.stop();
+            drop(m);
+            let _ = handle.join();
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_two_phase_shutdown() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = WrapperConfig::new("echo")
+            .track_children(true)
+            .tracking_poll_ms(50)
+            .enable_fswatch(true)
+            .watch_paths(vec![temp_dir.path().to_path_buf()])
+            .enable_netmon(true);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, _rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let pid = std::process::id();
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, pid, &risk_scorer, &logger, &event_tx);
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Phase 1: Signal all subsystems to stop (non-blocking)
+        if let Some((ref t, _)) = orchestrator.tracker {
+            t.signal_stop();
+        }
+        if let Some((ref w, _)) = orchestrator.fs_watcher {
+            w.signal_stop();
+        }
+        if let Some((ref m, _)) = orchestrator.net_monitor {
+            m.signal_stop();
+        }
+
+        // Phase 2: Stop, drop, and join each subsystem
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        if let Some((mut t, handle)) = tracker {
+            t.stop();
+            drop(t);
+            let _ = handle.join();
+        }
+        if let Some((mut w, handle)) = fs_watcher {
+            w.stop();
+            drop(w);
+            let _ = handle.join();
+        }
+        if let Some((mut m, handle)) = net_monitor {
+            m.stop();
+            drop(m);
+            let _ = handle.join();
+        }
+        // If we get here without hanging, the two-phase shutdown worked
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_orchestrator_fswatch_event_delivery() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(true)
+            .watch_paths(vec![temp_dir.path().to_path_buf()])
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let (tx, rx) = mpsc::channel();
+        let event_tx = Some(tx);
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 1, &risk_scorer, &logger, &event_tx);
+
+        // Give FSEvents time to start
+        std::thread::sleep(Duration::from_millis(300));
+
+        // Create a file in the watched directory
+        let test_file = temp_dir.path().join("orchestrator_test.txt");
+        fs::write(&test_file, "test content").unwrap();
+
+        // Wait for event delivery
+        std::thread::sleep(Duration::from_millis(500));
+
+        // Stop, drop, then join to avoid deadlock
+        let MonitoringOrchestrator {
+            tracker,
+            fs_watcher,
+            net_monitor,
+        } = orchestrator;
+
+        assert!(tracker.is_none());
+        assert!(net_monitor.is_none());
+        if let Some((mut w, handle)) = fs_watcher {
+            w.stop();
+            drop(w);
+            let _ = handle.join();
+        }
+
+        // Check that we received a FileAccess event through the wrapper channel
+        let mut found_file_event = false;
+        while let Ok(event) = rx.try_recv() {
+            if let WrapperEvent::FileAccess { ref path, .. } = event {
+                if path.to_string_lossy().contains("orchestrator_test.txt") {
+                    found_file_event = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_file_event,
+            "Should have received a FileAccess event through the orchestrator"
+        );
+    }
+
+    #[test]
+    fn test_wrapper_lifecycle_run_simple() {
+        // Test the full wrapper lifecycle: create -> subscribe -> run -> check events
+        let config = WrapperConfig::new("sh")
+            .args(vec!["-c".to_string(), "echo hello && exit 0".to_string()])
+            .track_children(false)
+            .enable_fswatch(false)
+            .enable_netmon(false);
+
+        let mut wrapper = ProcessWrapper::new(config);
+        let rx = wrapper.subscribe();
+
+        let exit_code = wrapper.run_simple().unwrap();
+        assert_eq!(exit_code, 0);
+
+        // Collect all events
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        // Should have received at least the command Event
+        assert!(
+            events.iter().any(|e| matches!(e, WrapperEvent::Event(_))),
+            "Should have received at least one Event"
+        );
+    }
+
+    #[test]
+    fn test_orchestrator_fswatch_disabled_with_empty_paths() {
+        // Even if fswatch is enabled, empty watch_paths should result in no watcher
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(true)
+            .watch_paths(vec![])
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let event_tx: Option<Sender<WrapperEvent>> = None;
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 1, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.fs_watcher.is_none());
+        orchestrator.stop();
+    }
+
+    #[test]
+    fn test_orchestrator_netmon_disabled_with_zero_pid() {
+        // netmon should not start if pid is 0
+        let config = WrapperConfig::new("echo")
+            .track_children(false)
+            .enable_fswatch(false)
+            .enable_netmon(true);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let event_tx: Option<Sender<WrapperEvent>> = None;
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 0, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.net_monitor.is_none());
+        orchestrator.stop();
+    }
+
+    #[test]
+    fn test_orchestrator_tracker_disabled_with_zero_pid() {
+        // tracker should not start if pid is 0
+        let config = WrapperConfig::new("echo")
+            .track_children(true)
+            .enable_fswatch(false)
+            .enable_netmon(false);
+
+        let risk_scorer = RiskScorer::new();
+        let logger = Logger::new(config.logger_config.clone());
+        let event_tx: Option<Sender<WrapperEvent>> = None;
+
+        let orchestrator =
+            MonitoringOrchestrator::start(&config, 0, &risk_scorer, &logger, &event_tx);
+
+        assert!(orchestrator.tracker.is_none());
+        orchestrator.stop();
     }
 }

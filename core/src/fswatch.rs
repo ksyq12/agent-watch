@@ -472,4 +472,193 @@ mod tests {
         drop(watcher);
         // If this doesn't hang, the drop worked correctly
     }
+
+    // --- Integration tests (macOS only) ---
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_fswatch_detects_file_creation() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let watch_path = temp_dir.path().to_path_buf();
+
+        let config =
+            FsWatchConfig::new(vec![watch_path.clone()]).latency(Duration::from_millis(50));
+        let mut watcher = FileSystemWatcher::new(config);
+        let rx = watcher.subscribe();
+
+        watcher.start().unwrap();
+        // Give FSEvents time to initialize
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Create a file in the watched directory
+        let test_file = watch_path.join("integration_test.txt");
+        fs::write(&test_file, "hello world").unwrap();
+
+        // Wait for FSEvents to deliver the event
+        std::thread::sleep(Duration::from_millis(500));
+
+        watcher.stop();
+
+        // Check that we received at least one event for the created file
+        let mut found_event = false;
+        while let Ok(event) = rx.try_recv() {
+            if let crate::event::EventType::FileAccess { ref path, .. } = event.event_type {
+                if path.to_string_lossy().contains("integration_test.txt") {
+                    found_event = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_event,
+            "Should have received a file event for the created file"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_fswatch_detects_file_modification() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let watch_path = temp_dir.path().to_path_buf();
+
+        // Pre-create a file before starting the watcher
+        let test_file = watch_path.join("modify_test.txt");
+        fs::write(&test_file, "initial content").unwrap();
+
+        let config = FsWatchConfig::new(vec![watch_path]).latency(Duration::from_millis(50));
+        let mut watcher = FileSystemWatcher::new(config);
+        let rx = watcher.subscribe();
+
+        watcher.start().unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+
+        // Modify the file
+        fs::write(&test_file, "modified content").unwrap();
+
+        std::thread::sleep(Duration::from_millis(1000));
+        watcher.stop();
+
+        let mut found_event = false;
+        while let Ok(event) = rx.try_recv() {
+            if let crate::event::EventType::FileAccess { ref path, .. } = event.event_type {
+                if path.to_string_lossy().contains("modify_test.txt") {
+                    found_event = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_event,
+            "Should have received a file event for the modified file"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_fswatch_signal_stop() {
+        let config = FsWatchConfig::new(vec![PathBuf::from("/tmp")]);
+        let mut watcher = FileSystemWatcher::new(config);
+
+        watcher.start().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(watcher.is_running());
+
+        // signal_stop should set the flag but not join the thread
+        watcher.signal_stop();
+        // After signal_stop, is_running returns false because stop_flag is set
+        assert!(!watcher.is_running());
+
+        // Full stop should still work and join the thread without hanging
+        watcher.stop();
+        assert!(!watcher.is_running());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_fswatch_sensitive_file_detection() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let watch_path = temp_dir.path().to_path_buf();
+
+        let config =
+            FsWatchConfig::new(vec![watch_path.clone()]).latency(Duration::from_millis(50));
+        let mut watcher = FileSystemWatcher::new(config);
+        let rx = watcher.subscribe();
+
+        watcher.start().unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Create a sensitive file (.env)
+        let env_file = watch_path.join(".env");
+        fs::write(&env_file, "SECRET_KEY=abc123").unwrap();
+
+        std::thread::sleep(Duration::from_millis(500));
+        watcher.stop();
+
+        let mut found_critical = false;
+        while let Ok(event) = rx.try_recv() {
+            if let crate::event::EventType::FileAccess { ref path, .. } = event.event_type {
+                if path.to_string_lossy().contains(".env") {
+                    assert_eq!(
+                        event.risk_level,
+                        crate::event::RiskLevel::Critical,
+                        "Sensitive file should have Critical risk level"
+                    );
+                    found_critical = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            found_critical,
+            "Should have detected .env as a sensitive file"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_fswatch_multiple_events() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let watch_path = temp_dir.path().to_path_buf();
+
+        let config =
+            FsWatchConfig::new(vec![watch_path.clone()]).latency(Duration::from_millis(50));
+        let mut watcher = FileSystemWatcher::new(config);
+        let rx = watcher.subscribe();
+
+        watcher.start().unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Create multiple files
+        for i in 0..3 {
+            let file = watch_path.join(format!("multi_test_{}.txt", i));
+            fs::write(&file, format!("content {}", i)).unwrap();
+        }
+
+        std::thread::sleep(Duration::from_millis(500));
+        watcher.stop();
+
+        // Count received events
+        let mut event_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            if let crate::event::EventType::FileAccess { .. } = event.event_type {
+                event_count += 1;
+            }
+        }
+        assert!(
+            event_count > 0,
+            "Should have received at least one file event"
+        );
+    }
 }
