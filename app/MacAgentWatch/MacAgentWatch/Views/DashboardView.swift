@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @Bindable var viewModel: MonitoringViewModel
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         NavigationSplitView {
@@ -69,7 +70,10 @@ struct DashboardView: View {
     }
 
     private func activityCard(title: String, count: Int, icon: String, color: Color) -> some View {
-        VStack(spacing: 6) {
+        let fillOpacity = contrast == .increased ? 0.15 : 0.08
+        let borderOpacity = contrast == .increased ? 0.3 : 0.15
+        let borderWidth: CGFloat = contrast == .increased ? 2 : 1
+        return VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .foregroundStyle(color)
@@ -87,10 +91,10 @@ struct DashboardView: View {
         .padding(.vertical, 12)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(color.opacity(0.08))
+                .fill(color.opacity(fillOpacity))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(color.opacity(0.15), lineWidth: 1)
+                        .strokeBorder(color.opacity(borderOpacity), lineWidth: borderWidth)
                 )
         }
         .accessibilityElement(children: .combine)
@@ -105,9 +109,9 @@ struct DashboardView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            filterChip(label: String(localized: "filter.all"), level: nil)
+            filterChip(label: String(localized: "filter.all"), icon: nil, level: nil)
             ForEach(RiskLevel.allCases, id: \.self) { level in
-                filterChip(label: level.label, level: level)
+                filterChip(label: level.label, icon: level.icon, level: level)
             }
 
             Spacer()
@@ -118,19 +122,26 @@ struct DashboardView: View {
         }
     }
 
-    private func filterChip(label: String, level: RiskLevel?) -> some View {
+    private func filterChip(label: String, icon: String?, level: RiskLevel?) -> some View {
         let isSelected = viewModel.filterRiskLevel == level
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) {
                 viewModel.filterRiskLevel = level
             }
         } label: {
-            Text(label)
-                .font(.caption.weight(isSelected ? .semibold : .regular))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(isSelected ? chipColor(level).opacity(0.15) : Color.clear, in: Capsule())
-                .overlay(Capsule().strokeBorder(isSelected ? chipColor(level).opacity(0.3) : Color.secondary.opacity(0.2), lineWidth: 1))
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.caption2)
+                        .foregroundStyle(chipColor(level))
+                }
+                Text(label)
+            }
+            .font(.caption.weight(isSelected ? .semibold : .regular))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(isSelected ? chipColor(level).opacity(0.15) : Color.clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(isSelected ? chipColor(level).opacity(0.3) : Color.secondary.opacity(0.2), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isSelected
@@ -141,6 +152,14 @@ struct DashboardView: View {
 
     private func chipColor(_ level: RiskLevel?) -> Color {
         guard let level else { return .blue }
+        if contrast == .increased {
+            switch level {
+            case .low: return .green
+            case .medium: return .orange
+            case .high: return .red
+            case .critical: return .red
+            }
+        }
         switch level {
         case .low: return .green
         case .medium: return .yellow

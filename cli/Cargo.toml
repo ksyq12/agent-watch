@@ -17,6 +17,8 @@ anyhow.workspace = true
 colored.workspace = true
 serde_json.workspace = true
 dirs.workspace = true
+fluent-bundle.workspace = true
+unic-langid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

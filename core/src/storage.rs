@@ -30,6 +30,7 @@ pub struct SessionLogger {
     file_path: PathBuf,
     writer: BufWriter<File>,
     event_count: usize,
+    auto_flush_interval: usize,
 }
 
 impl SessionLogger {
@@ -76,6 +77,7 @@ impl SessionLogger {
             file_path,
             writer,
             event_count: 0,
+            auto_flush_interval: 10,
         })
     }
 
@@ -128,6 +130,9 @@ impl EventStorage for SessionLogger {
         let json = serde_json::to_string(event).map_err(StorageError::Serialize)?;
         writeln!(self.writer, "{}", json).map_err(StorageError::Write)?;
         self.event_count += 1;
+        if self.event_count.is_multiple_of(self.auto_flush_interval) {
+            self.flush()?;
+        }
         Ok(())
     }
 
@@ -143,7 +148,9 @@ impl EventStorage for SessionLogger {
 
 impl Drop for SessionLogger {
     fn drop(&mut self) {
-        let _ = self.flush();
+        if let Err(e) = self.flush() {
+            eprintln!("[agent-watch] Warning: Failed to flush session logger on drop: {e}");
+        }
     }
 }
 
@@ -376,5 +383,61 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
             assert!(parsed.is_object());
         }
+    }
+
+    #[test]
+    fn test_auto_flush_on_interval() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_dir = temp_dir.path().to_path_buf();
+
+        let mut logger = SessionLogger::new(&log_dir, Some("autoflush".to_string())).unwrap();
+        // Set a small interval for testing
+        logger.auto_flush_interval = 5;
+
+        // Write exactly 5 events (should trigger auto-flush)
+        for i in 0..5 {
+            let event = Event::command(
+                format!("cmd{}", i),
+                vec![],
+                "bash".to_string(),
+                1234,
+                RiskLevel::Low,
+            );
+            logger.write_event(&event).unwrap();
+        }
+
+        // Data should be flushed to disk without explicit flush() call
+        let content = std::fs::read_to_string(logger.path()).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 5);
+
+        // Write 3 more events (below next flush threshold of 10)
+        for i in 5..8 {
+            let event = Event::command(
+                format!("cmd{}", i),
+                vec![],
+                "bash".to_string(),
+                1234,
+                RiskLevel::Low,
+            );
+            logger.write_event(&event).unwrap();
+        }
+
+        // Only the first 5 should be reliably on disk (buffered writer may not have flushed the rest)
+        // After the 10th event, another flush should happen
+        for i in 8..10 {
+            let event = Event::command(
+                format!("cmd{}", i),
+                vec![],
+                "bash".to_string(),
+                1234,
+                RiskLevel::Low,
+            );
+            logger.write_event(&event).unwrap();
+        }
+
+        let content = std::fs::read_to_string(logger.path()).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 10);
     }
 }

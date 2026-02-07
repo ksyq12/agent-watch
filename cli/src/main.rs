@@ -2,9 +2,12 @@
 //!
 //! Command-line interface for monitoring AI agents.
 
+mod i18n;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
+use i18n::{t, t_args};
 use macagentwatch_core::{
     Config, LogFormat, LoggerConfig, NetworkWhitelist, ProcessWrapper, RiskLevel, RiskScorer,
     WrapperConfig,
@@ -148,29 +151,29 @@ fn main() -> Result<()> {
 fn print_version() {
     println!(
         "{} v{}",
-        "MacAgentWatch".cyan().bold(),
+        t("version-title").cyan().bold(),
         macagentwatch_core::VERSION
     );
-    println!("AI Agent Monitoring Tool for macOS");
+    println!("{}", t("version-subtitle"));
     println!();
-    println!("Core: {}", macagentwatch_core::NAME);
+    println!("{}: {}", t("version-core-label"), macagentwatch_core::NAME);
 }
 
 fn print_usage() {
-    println!("{}", "MacAgentWatch".cyan().bold());
-    println!("AI Agent Monitoring Tool");
+    println!("{}", t("usage-title").cyan().bold());
+    println!("{}", t("usage-subtitle"));
     println!();
-    println!("{}", "USAGE:".yellow());
-    println!("    macagentwatch [OPTIONS] -- <COMMAND> [ARGS]...");
-    println!("    macagentwatch analyze <COMMAND> [ARGS]...");
+    println!("{}", t("usage-label").yellow());
+    println!("    {}", t("usage-line1"));
+    println!("    {}", t("usage-line2"));
     println!();
-    println!("{}", "EXAMPLES:".yellow());
-    println!("    macagentwatch -- claude-code \"help me with this project\"");
-    println!("    macagentwatch --format json -- cursor");
-    println!("    macagentwatch analyze rm -rf /tmp/cache");
-    println!("    macagentwatch --watch ~/projects -- your-agent");
+    println!("{}", t("examples-label").yellow());
+    println!("    {}", t("example-claude"));
+    println!("    {}", t("example-json"));
+    println!("    {}", t("example-analyze"));
+    println!("    {}", t("example-watch"));
     println!();
-    println!("Run 'macagentwatch --help' for more options.");
+    println!("{}", t("usage-help-hint"));
 }
 
 fn analyze_command(
@@ -191,56 +194,63 @@ fn analyze_command(
     match format {
         OutputFormat::Pretty => {
             println!();
-            println!("{}", "Command Analysis".cyan().bold());
-            println!("{}", "─".repeat(50));
+            println!("{}", t("analyze-title").cyan().bold());
+            println!("{}", "\u{2500}".repeat(50));
             println!();
-            println!("  {} {}", "Command:".dimmed(), full_cmd);
+            println!("  {} {}", t("analyze-command-label").dimmed(), full_cmd);
             println!();
 
             let level_str = match level {
                 RiskLevel::Low => {
                     if no_color {
-                        "🟢 LOW".to_string()
+                        format!("\u{1f7e2} {}", t("risk-low"))
                     } else {
-                        format!("🟢 {}", "LOW".green())
+                        format!("\u{1f7e2} {}", t("risk-low").green())
                     }
                 }
                 RiskLevel::Medium => {
                     if no_color {
-                        "🟡 MEDIUM".to_string()
+                        format!("\u{1f7e1} {}", t("risk-medium"))
                     } else {
-                        format!("🟡 {}", "MEDIUM".yellow())
+                        format!("\u{1f7e1} {}", t("risk-medium").yellow())
                     }
                 }
                 RiskLevel::High => {
                     if no_color {
-                        "🟠 HIGH".to_string()
+                        format!("\u{1f7e0} {}", t("risk-high"))
                     } else {
-                        format!("🟠 {}", "HIGH".bright_yellow().bold())
+                        format!("\u{1f7e0} {}", t("risk-high").bright_yellow().bold())
                     }
                 }
                 RiskLevel::Critical => {
                     if no_color {
-                        "🔴 CRITICAL".to_string()
+                        format!("\u{1f534} {}", t("risk-critical"))
                     } else {
-                        format!("🔴 {}", "CRITICAL".red().bold())
+                        format!("\u{1f534} {}", t("risk-critical").red().bold())
                     }
                 }
             };
 
-            println!("  {} {}", "Risk Level:".dimmed(), level_str);
+            println!(
+                "  {} {}",
+                t("analyze-risk-label").dimmed(),
+                level_str
+            );
 
             if let Some(r) = reason {
-                println!("  {} {}", "Reason:".dimmed(), r);
+                println!("  {} {}", t("analyze-reason-label").dimmed(), r);
             }
 
             println!();
 
             if level >= RiskLevel::High {
                 let warning = if no_color {
-                    "⚠️  This command may be dangerous!".to_string()
+                    format!("\u{26a0}\u{fe0f}  {}", t("analyze-danger-warning"))
                 } else {
-                    format!("⚠️  {}", "This command may be dangerous!".red())
+                    format!(
+                        "\u{26a0}\u{fe0f}  {}",
+                        t("analyze-danger-warning").red()
+                    )
                 };
                 println!("  {}", warning);
                 println!();
@@ -258,10 +268,10 @@ fn analyze_command(
         }
         OutputFormat::Compact => {
             let level_str = match level {
-                RiskLevel::Low => "LOW",
-                RiskLevel::Medium => "MED",
-                RiskLevel::High => "HIGH",
-                RiskLevel::Critical => "CRIT",
+                RiskLevel::Low => t("risk-low"),
+                RiskLevel::Medium => t("risk-med-compact"),
+                RiskLevel::High => t("risk-high"),
+                RiskLevel::Critical => t("risk-crit-compact"),
             };
             println!("[{}] {} {}", level_str, full_cmd, reason.unwrap_or(""));
         }
@@ -271,7 +281,10 @@ fn analyze_command(
 }
 
 fn run_wrapper(cli: Cli) -> Result<()> {
-    let command = cli.cmd.first().context("No command specified")?;
+    let command = cli
+        .cmd
+        .first()
+        .context(t("error-no-command"))?;
     let args: Vec<String> = cli.cmd.iter().skip(1).cloned().collect();
 
     // Load config file if specified or use default
@@ -320,20 +333,21 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     }
 
     // Print banner
+    let banner_text = format!("\u{25c9} {}", t("banner-recording"));
     if !cli.no_color {
         println!();
-        println!("{}", "╭─────────────────────────────────────╮".cyan());
+        println!("{}", "\u{256d}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}".cyan());
         println!(
             "{}  {}  {}",
-            "│".cyan(),
-            "◉ MacAgentWatch Recording".green().bold(),
-            "│".cyan()
+            "\u{2502}".cyan(),
+            banner_text.green().bold(),
+            "\u{2502}".cyan()
         );
-        println!("{}", "╰─────────────────────────────────────╯".cyan());
+        println!("{}", "\u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256f}".cyan());
         println!();
     } else {
         println!();
-        println!("◉ MacAgentWatch Recording");
+        println!("{}", banner_text);
         println!();
     }
 
@@ -345,25 +359,30 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     } else {
         // Try PTY first, fall back to simple if it fails
         wrapper.run().unwrap_or_else(|e| {
-            eprintln!("PTY failed ({}), using simple mode", e);
+            eprintln!(
+                "{}",
+                t_args("error-pty-fallback", &[("error", &e.to_string())])
+            );
             wrapper.run_simple().unwrap_or(-1)
         })
     };
 
     // Print footer
+    let exit_str = exit_code.to_string();
+    let footer_text = t_args("session-ended", &[("exit_code", &exit_str)]);
     if !cli.no_color {
         println!();
-        println!("{}", "╭─────────────────────────────────────╮".cyan());
+        println!("{}", "\u{256d}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}".cyan());
         println!(
             "{}  {}  {}",
-            "│".cyan(),
-            format!("Session ended (exit: {})", exit_code).dimmed(),
-            "│".cyan()
+            "\u{2502}".cyan(),
+            footer_text.dimmed(),
+            "\u{2502}".cyan()
         );
-        println!("{}", "╰─────────────────────────────────────╯".cyan());
+        println!("{}", "\u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256f}".cyan());
     } else {
         println!();
-        println!("Session ended (exit: {})", exit_code);
+        println!("{}", footer_text);
     }
 
     std::process::exit(exit_code);
@@ -440,5 +459,12 @@ mod tests {
         let cli = Cli::parse_from(["macagentwatch", "--", "cmd"]);
         assert_eq!(cli.tracking_poll_ms, 100);
         assert!(!cli.no_track_children);
+    }
+
+    #[test]
+    fn test_i18n_messages_loaded() {
+        assert_eq!(t("version-title"), "MacAgentWatch");
+        assert_eq!(t("risk-low"), "LOW");
+        assert_eq!(t("risk-critical"), "CRITICAL");
     }
 }

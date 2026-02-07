@@ -12,6 +12,22 @@ echo "=== MacAgentWatch FFI Build ==="
 echo "Project root: $PROJECT_ROOT"
 echo "Build mode: $BUILD_MODE"
 
+# Prerequisite checks
+echo ""
+echo "--- Checking prerequisites ---"
+MISSING=""
+for cmd in cargo rustc; do
+    if ! command -v "$cmd" &>/dev/null; then
+        MISSING="$MISSING $cmd"
+    fi
+done
+if [ -n "$MISSING" ]; then
+    echo "ERROR: Missing required tools:$MISSING"
+    echo "Please install Rust toolchain: https://rustup.rs"
+    exit 1
+fi
+echo "All prerequisites found."
+
 # Output directories
 CORE_DIR="$PROJECT_ROOT/app/MacAgentWatchCore"
 LIB_DIR="$CORE_DIR/lib"
