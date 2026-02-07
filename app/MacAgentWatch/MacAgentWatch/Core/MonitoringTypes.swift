@@ -22,7 +22,12 @@ enum RiskLevel: String, Codable, CaseIterable, Comparable {
     }
 
     var label: String {
-        rawValue.capitalized
+        switch self {
+        case .low: return String(localized: "risk.low")
+        case .medium: return String(localized: "risk.medium")
+        case .high: return String(localized: "risk.high")
+        case .critical: return String(localized: "risk.critical")
+        }
     }
 
     private var sortOrder: Int {

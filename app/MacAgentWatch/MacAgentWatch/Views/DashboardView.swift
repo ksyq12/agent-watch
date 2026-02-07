@@ -10,7 +10,7 @@ struct DashboardView: View {
         } detail: {
             detailContent
         }
-        .navigationTitle("MacAgentWatch")
+        .navigationTitle(String(localized: "app.name"))
         .frame(minWidth: 800, minHeight: 500)
     }
 
@@ -36,31 +36,31 @@ struct DashboardView: View {
     private var activityCards: some View {
         HStack(spacing: 12) {
             activityCard(
-                title: "Total Events",
+                title: String(localized: "summary.total.events"),
                 count: viewModel.activitySummary.totalEvents,
                 icon: "list.bullet",
                 color: .blue
             )
             activityCard(
-                title: "Critical",
+                title: String(localized: "summary.critical"),
                 count: viewModel.activitySummary.criticalCount,
                 icon: "xmark.octagon.fill",
                 color: .red
             )
             activityCard(
-                title: "High",
+                title: String(localized: "summary.high"),
                 count: viewModel.activitySummary.highCount,
                 icon: "exclamationmark.octagon.fill",
                 color: .orange
             )
             activityCard(
-                title: "Medium",
+                title: String(localized: "summary.medium"),
                 count: viewModel.activitySummary.mediumCount,
                 icon: "exclamationmark.triangle.fill",
                 color: .yellow
             )
             activityCard(
-                title: "Low",
+                title: String(localized: "summary.low"),
                 count: viewModel.activitySummary.lowCount,
                 icon: "checkmark.circle.fill",
                 color: .green
@@ -93,24 +93,26 @@ struct DashboardView: View {
                         .strokeBorder(color.opacity(0.15), lineWidth: 1)
                 )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(format: NSLocalizedString("a11y.dashboard.card", comment: ""), title, count))
     }
 
     // MARK: - Filter Bar
 
     private var filterBar: some View {
         HStack(spacing: 8) {
-            Text("Filter:")
+            Text("filter.label")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            filterChip(label: "All", level: nil)
+            filterChip(label: String(localized: "filter.all"), level: nil)
             ForEach(RiskLevel.allCases, id: \.self) { level in
                 filterChip(label: level.label, level: level)
             }
 
             Spacer()
 
-            Text("\(viewModel.filteredEvents.count) events")
+            Text(verbatim: String(format: NSLocalizedString("filter.events.count", comment: ""), viewModel.filteredEvents.count))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -131,6 +133,10 @@ struct DashboardView: View {
                 .overlay(Capsule().strokeBorder(isSelected ? chipColor(level).opacity(0.3) : Color.secondary.opacity(0.2), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(isSelected
+            ? String(format: NSLocalizedString("a11y.filter.chip.selected", comment: ""), label)
+            : String(format: NSLocalizedString("a11y.filter.chip", comment: ""), label))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func chipColor(_ level: RiskLevel?) -> Color {
@@ -150,5 +156,6 @@ struct DashboardView: View {
             EventRowView(event: event)
         }
         .listStyle(.inset(alternatesRowBackgrounds: true))
+        .accessibilityLabel(Text("a11y.events.list"))
     }
 }

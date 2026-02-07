@@ -116,8 +116,12 @@ impl Logger {
             });
         }
 
-        // Risk level emoji
-        parts.push(event.risk_level.emoji().to_string());
+        // Risk level indicator: emoji when colors enabled, text label otherwise
+        if self.config.use_colors {
+            parts.push(event.risk_level.emoji().to_string());
+        } else {
+            parts.push(event.risk_level.text_label().to_string());
+        }
 
         // Event details
         let details = match &event.event_type {
@@ -332,7 +336,8 @@ mod tests {
         );
 
         let output = logger.format(&event);
-        assert!(output.contains("🟢"));
+        // Without colors, text_label() is used instead of emoji
+        assert!(output.contains("[LOW]"));
         assert!(output.contains("ls"));
     }
 

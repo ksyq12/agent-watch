@@ -12,7 +12,7 @@ struct SessionListView: View {
             )
         }
         .listStyle(.sidebar)
-        .navigationTitle("Sessions")
+        .navigationTitle(String(localized: "sessions.title"))
     }
 }
 
@@ -40,6 +40,9 @@ private struct SessionRowButton: View {
         }
         .buttonStyle(.plain)
         .listRowBackground(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(format: NSLocalizedString("a11y.session.row", comment: ""), session.sessionId, session.startTimeString))
+        .accessibilityHint(Text("a11y.session.hint"))
     }
 
     @ViewBuilder

@@ -31,6 +31,17 @@ impl RiskLevel {
         }
     }
 
+    /// Returns a text alternative for the risk level, suitable for
+    /// terminals that may not render emojis properly.
+    pub fn text_label(&self) -> &'static str {
+        match self {
+            RiskLevel::Low => "[LOW]",
+            RiskLevel::Medium => "[MED]",
+            RiskLevel::High => "[HIGH]",
+            RiskLevel::Critical => "[CRIT]",
+        }
+    }
+
     /// Returns the color name for terminal output
     pub fn color(&self) -> &'static str {
         match self {
@@ -262,6 +273,14 @@ mod tests {
         assert_eq!(RiskLevel::Medium.emoji(), "🟡");
         assert_eq!(RiskLevel::High.emoji(), "🟠");
         assert_eq!(RiskLevel::Critical.emoji(), "🔴");
+    }
+
+    #[test]
+    fn test_risk_level_text_label() {
+        assert_eq!(RiskLevel::Low.text_label(), "[LOW]");
+        assert_eq!(RiskLevel::Medium.text_label(), "[MED]");
+        assert_eq!(RiskLevel::High.text_label(), "[HIGH]");
+        assert_eq!(RiskLevel::Critical.text_label(), "[CRIT]");
     }
 
     #[test]

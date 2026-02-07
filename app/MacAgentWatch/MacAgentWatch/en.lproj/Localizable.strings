@@ -1,0 +1,66 @@
+/*
+  Localizable.strings
+  MacAgentWatch
+
+  English (Base) localization
+*/
+
+// MARK: - App
+"app.name" = "MacAgentWatch";
+"app.version" = "v%@";
+"app.dashboard.title" = "MacAgentWatch Dashboard";
+
+// MARK: - Status
+"status.active" = "Active";
+"status.idle" = "Idle";
+
+// MARK: - Activity Summary
+"summary.title" = "Activity Summary";
+"summary.total" = "Total";
+"summary.total.events" = "Total Events";
+"summary.critical" = "Critical";
+"summary.high" = "High";
+"summary.medium" = "Medium";
+"summary.low" = "Low";
+
+// MARK: - Alerts
+"alerts.title" = "Recent Alerts";
+"alerts.empty" = "No recent alerts";
+
+// MARK: - Actions
+"action.open.dashboard" = "Open Dashboard";
+"action.quit" = "Quit MacAgentWatch";
+
+// MARK: - Filter
+"filter.label" = "Filter:";
+"filter.all" = "All";
+"filter.events.count" = "%lld events";
+
+// MARK: - Sessions
+"sessions.title" = "Sessions";
+
+// MARK: - Event Row
+"event.pid" = "PID %u";
+
+// MARK: - Risk Levels
+"risk.low" = "Low";
+"risk.medium" = "Medium";
+"risk.high" = "High";
+"risk.critical" = "Critical";
+
+// MARK: - Content View
+"content.hint" = "Use the menu bar icon or open the Dashboard window.";
+
+// MARK: - Accessibility Labels
+"a11y.status.monitoring" = "Monitoring status: active";
+"a11y.status.idle" = "Monitoring status: idle";
+"a11y.summary.card" = "%@ count: %lld";
+"a11y.alert.badge" = "Alert triggered";
+"a11y.risk.indicator" = "Risk level: %@";
+"a11y.event.type" = "Event type: %@";
+"a11y.session.row" = "Session %@, started %@";
+"a11y.filter.chip" = "Filter by %@";
+"a11y.filter.chip.selected" = "Filtering by %@";
+"a11y.dashboard.card" = "%@: %lld";
+"a11y.session.hint" = "Double-tap to load session";
+"a11y.events.list" = "Events list";

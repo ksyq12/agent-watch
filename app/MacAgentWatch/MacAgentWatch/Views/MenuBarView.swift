@@ -26,9 +26,9 @@ struct MenuBarView: View {
                 .foregroundStyle(.tint)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("MacAgentWatch")
+                Text("app.name")
                     .font(.headline)
-                Text("v\(viewModel.version)")
+                Text(String(format: String(localized: "app.version"), viewModel.version))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -45,42 +45,43 @@ struct MenuBarView: View {
             Circle()
                 .fill(viewModel.isMonitoring ? Color.green : Color.secondary)
                 .frame(width: 8, height: 8)
-            Text(viewModel.isMonitoring ? "Active" : "Idle")
+            Text(viewModel.isMonitoring ? String(localized: "status.active") : String(localized: "status.idle"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.quaternary, in: Capsule())
+        .accessibilityLabel(viewModel.isMonitoring ? String(localized: "a11y.status.monitoring") : String(localized: "a11y.status.idle"))
     }
 
     // MARK: - Summary
 
     private var summarySection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Activity Summary")
+            Text("summary.title")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
                 summaryCard(
                     count: viewModel.activitySummary.totalEvents,
-                    label: "Total",
+                    label: String(localized: "summary.total"),
                     color: .primary
                 )
                 summaryCard(
                     count: viewModel.activitySummary.criticalCount,
-                    label: "Critical",
+                    label: String(localized: "summary.critical"),
                     color: .red
                 )
                 summaryCard(
                     count: viewModel.activitySummary.highCount,
-                    label: "High",
+                    label: String(localized: "summary.high"),
                     color: .orange
                 )
                 summaryCard(
                     count: viewModel.activitySummary.mediumCount,
-                    label: "Medium",
+                    label: String(localized: "summary.medium"),
                     color: .yellow
                 )
             }
@@ -100,20 +101,21 @@ struct MenuBarView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel(String(format: String(localized: "a11y.summary.card"), label, count))
     }
 
     // MARK: - Alerts
 
     private var alertsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Recent Alerts")
+            Text("alerts.title")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
             if viewModel.recentAlerts.isEmpty {
                 HStack {
                     Spacer()
-                    Text("No recent alerts")
+                    Text("alerts.empty")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()
@@ -149,6 +151,8 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(format: String(localized: "a11y.risk.indicator"), String(describing: event.riskLevel)))
     }
 
     // MARK: - Actions
@@ -158,20 +162,23 @@ struct MenuBarView: View {
             Button {
                 openWindow(id: "dashboard")
             } label: {
-                Label("Open Dashboard", systemImage: "rectangle.on.rectangle")
+                Label("action.open.dashboard", systemImage: "rectangle.on.rectangle")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(String(localized: "action.open.dashboard"))
+            .accessibilityHint(String(localized: "app.dashboard.title"))
 
             Divider()
 
             Button(role: .destructive) {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Label("Quit MacAgentWatch", systemImage: "power")
+                Label("action.quit", systemImage: "power")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(String(localized: "action.quit"))
         }
         .padding(12)
     }

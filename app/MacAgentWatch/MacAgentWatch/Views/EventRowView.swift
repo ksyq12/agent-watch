@@ -12,6 +12,8 @@ struct EventRowView: View {
             trailingInfo
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(event.riskLevel.label) risk, \(event.eventType.description), \(event.process), PID \(event.pid)")
     }
 
     // MARK: - Risk Indicator
@@ -20,6 +22,7 @@ struct EventRowView: View {
         Circle()
             .fill(riskColor)
             .frame(width: 10, height: 10)
+            .accessibilityLabel(String(format: NSLocalizedString("a11y.risk.indicator", comment: ""), event.riskLevel.label))
     }
 
     // MARK: - Event Icon
@@ -41,7 +44,7 @@ struct EventRowView: View {
 
             HStack(spacing: 8) {
                 Label(event.process, systemImage: "gearshape")
-                Label("PID \(event.pid)", systemImage: "number")
+                Label(String(format: NSLocalizedString("event.pid", comment: ""), event.pid), systemImage: "number")
                 HStack(spacing: 2) {
                     Image(systemName: "clock")
                     Text(event.timestamp, style: .relative)
@@ -62,6 +65,8 @@ struct EventRowView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                     .symbolEffect(.pulse, options: .repeating)
+                    .accessibilityLabel(String(localized: "a11y.alert.badge"))
+                    .accessibilityRemoveTraits(.isImage)
             }
 
             Image(systemName: event.riskLevel.icon)

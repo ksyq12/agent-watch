@@ -23,10 +23,10 @@
 | 에러 처리 | ~~3~~ 0 | 3 | 3 | ~~3~~ 6 |
 | 데이터 영속성 | ~~2~~ 0 | 3 | 4 | ~~5~~ 7 |
 | 성능 최적화 | 0 | 3 | 5 | 2 |
-| 접근성/국제화 | 3 | 4 | 4 | 1 |
+| 접근성/국제화 | ~~3~~ 0 | 4 | 4 | ~~1~~ 4 |
 | 테스트 커버리지 | ~~1~~ 0 | 3 | 1 | ~~1~~ 2 |
 | CI/CD/빌드 | ~~2~~ 0 | 3 | 3 | ~~2~~ 4 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ 3** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ 71** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ 74** |
 
 ---
 
@@ -66,13 +66,13 @@
 | ~~C13~~ | 영속성 | `core/src/storage.rs:106-107` | ~~**SessionLogger header/footer write 후 flush 미보장**~~ | ✅ **해결**: `write_session_header`에 `self.flush()?;` 추가. `write_session_footer`는 기존 flush 존재 확인. 비정상 종료 시 세션 헤더 손실 방지 |
 | ~~C14~~ | 영속성 | `core/src/wrapper.rs:619-642` | ~~**log_session_start/end 에러 무시 (`let _ =`)**~~ — 세션 메타데이터 손실 | ✅ **해결**: `let _ =` → `if let Err(e)` 패턴으로 변경. `log_session_start` 실패 시 `eprintln!("[agent-watch] Warning: Failed to log session start: {e}")`, `log_session_end` 실패 시 write/flush 각각 경고 출력 |
 
-### 2.5 접근성/국제화
+### 2.5 접근성/국제화 — ✅ 조치 완료 (2026-02-07)
 
-| # | 영역 | 파일/위치 | 설명 | 권장 조치 |
+| # | 영역 | 파일/위치 | 설명 | 조치 결과 |
 |---|------|-----------|------|-----------|
-| C15 | i18n | Swift UI 전체 | **모든 UI 문자열 하드코딩** — i18n 불가 | `Localizable.strings` + `LocalizedStringKey` 도입 |
-| C16 | 접근성 | Swift Views 전체 | **접근성 레이블 전무** — VoiceOver 사용 불가 | `.accessibilityLabel()` 추가 |
-| C17 | 접근성 | `core/src/event.rs:24-32` | **이모지 하드코딩** — 터미널 환경에 따라 미표시 | 텍스트 대체 옵션 제공 |
+| ~~C15~~ | i18n | Swift UI 전체 | ~~**모든 UI 문자열 하드코딩** — i18n 불가~~ | ✅ **해결**: `en.lproj/Localizable.strings` 생성 (50+ 키). 모든 View에 `LocalizedStringKey` / `String(localized:)` 적용. MenuBarView, DashboardView, SessionListView, EventRowView, ContentView, MacAgentWatchApp, MonitoringTypes 전수 변환 |
+| ~~C16~~ | 접근성 | Swift Views 전체 | ~~**접근성 레이블 전무** — VoiceOver 사용 불가~~ | ✅ **해결**: 전체 View에 `.accessibilityLabel()`, `.accessibilityHint()`, `.accessibilityElement(children: .combine)`, `.accessibilityAddTraits()`, `.accessibilityRemoveTraits()` 추가. 상태 배지, 요약 카드, 알림 행, 이벤트 행, 세션 행, 필터 칩, 대시보드 카드 등 모든 UI 요소 VoiceOver 대응 |
+| ~~C17~~ | 접근성 | `core/src/event.rs:24-32` | ~~**이모지 하드코딩** — 터미널 환경에 따라 미표시~~ | ✅ **해결**: `RiskLevel::text_label()` 메서드 추가 — `[LOW]`, `[MED]`, `[HIGH]`, `[CRIT]` 텍스트 대체 제공. 기존 `emoji()` 유지, 터미널 호환성 옵션 확보. 테스트 추가 완료 |
 
 ---
 
@@ -330,9 +330,9 @@
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🔴 Critical | Swift UI 전체 | **하드코딩 영어 문자열** — i18n 불가 | `Localizable.strings` + `LocalizedStringKey` |
-| 2 | 🔴 Critical | Swift Views 전체 | **접근성 레이블 누락** — VoiceOver 불가 | `.accessibilityLabel()` 전면 추가 |
-| 3 | 🔴 Critical | `core/src/event.rs:24-32` | **이모지 하드코딩** | 텍스트 대체 옵션 제공 |
+| 1 | ~~🔴 Critical~~ 🟢 | Swift UI 전체 | ~~**하드코딩 영어 문자열** — i18n 불가~~ | ✅ `en.lproj/Localizable.strings` + `LocalizedStringKey`/`String(localized:)` 전면 적용 |
+| 2 | ~~🔴 Critical~~ 🟢 | Swift Views 전체 | ~~**접근성 레이블 누락** — VoiceOver 불가~~ | ✅ `.accessibilityLabel()`, `.accessibilityHint()`, `.accessibilityElement(children: .combine)` 전면 추가 |
+| 3 | ~~🔴 Critical~~ 🟢 | `core/src/event.rs:24-32` | ~~**이모지 하드코딩**~~ | ✅ `text_label()` 메서드 추가 (`[LOW]`, `[MED]`, `[HIGH]`, `[CRIT]`) |
 | 4 | 🟠 Major | `cli/src/main.rs:148-174` | **CLI 메시지 영어 고정** | fluent-rs/gettext 도입 |
 | 5 | 🟠 Major | `core/src/risk.rs:16` | **RiskRule reason 영어 `&'static str`** | i18n 키로 변경 |
 | 6 | 🟠 Major | `app/.../EventRowView.swift:60-77` | **접근성 힌트 누락** | `.accessibilityValue()`, `.accessibilityHint()` |
@@ -386,15 +386,15 @@
 - ~~Swift 테스트 0개~~ ✅ 71개 테스트 추가
 - ~~동시성/메모리 관련 race condition 6건~~ ✅ 6건 모두 해결됨
 - ~~데이터 영속성 flush/에러 처리~~ ✅ 해결됨
-- 접근성/i18n 미지원
+- ~~접근성/i18n 미지원~~ ✅ 해결됨
 
 ### 프로덕션 배포 판단
 
-> **🔴 Critical ~~17건~~ → ~~14건~~ → ~~8건~~ → ~~5건~~ → 3건 해결 필요** (14건 조치 완료)
+> **🔴 Critical ~~17건~~ → ~~14건~~ → ~~8건~~ → ~~5건~~ → ~~3건~~ → 0건 — 전체 해결 완료** (17건 조치 완료)
 > - ~~C1-C3: 인프라 (CI, Makefile, Swift 테스트)~~ ✅ 조치 완료
 > - ~~C4-C9: 동시성/메모리 안전성~~ ✅ 조치 완료
 > - ~~C10-C12: 에러 처리 (조용한 실패 방지)~~ ✅ 조치 완료
 > - ~~C13-C14: 데이터 영속성 (flush 보장)~~ ✅ 조치 완료
-> - C15-C17: 접근성/국제화
+> - ~~C15-C17: 접근성/국제화~~ ✅ 조치 완료
 
-다음 우선 과제: 접근성/국제화 (C15-C17) 개선.
+다음 우선 과제: 🟠 Major 30건 단기 개선 로드맵 진행.
