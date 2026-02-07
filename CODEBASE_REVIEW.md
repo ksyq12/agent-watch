@@ -21,12 +21,12 @@
 | 메모리 관리 | ~~3~~ 0 | 3 | 2 | ~~2~~ 5 |
 | 동시성/스레드 안전성 | ~~3~~ 0 | 3 | 2 | ~~0~~ 3 |
 | 에러 처리 | ~~3~~ 0 | 3 | 3 | ~~3~~ 6 |
-| 데이터 영속성 | 2 | 3 | 4 | 5 |
+| 데이터 영속성 | ~~2~~ 0 | 3 | 4 | ~~5~~ 7 |
 | 성능 최적화 | 0 | 3 | 5 | 2 |
 | 접근성/국제화 | 3 | 4 | 4 | 1 |
 | 테스트 커버리지 | ~~1~~ 0 | 3 | 1 | ~~1~~ 2 |
 | CI/CD/빌드 | ~~2~~ 0 | 3 | 3 | ~~2~~ 4 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ 5** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ 69** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ 3** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ 71** |
 
 ---
 
@@ -59,12 +59,12 @@
 | ~~C11~~ | 에러 | `core/src/wrapper.rs:262-265` | ~~**FSWatcher 시작 실패 무시**~~ | ✅ **해결**: `is_err()` → `if let Err(e)` 패턴으로 변경. 실패 시 `eprintln!("[agent-watch] Warning: Failed to start file system watcher: {e}")` 경고 출력 |
 | ~~C12~~ | 에러 | `core/src/wrapper.rs:302-305` | ~~**NetworkMonitor 시작 실패 무시**~~ | ✅ **해결**: `is_err()` → `if let Err(e)` 패턴으로 변경. 실패 시 `eprintln!("[agent-watch] Warning: Failed to start network monitor: {e}")` 경고 출력 |
 
-### 2.4 데이터/영속성
+### 2.4 데이터/영속성 — ✅ 조치 완료 (2026-02-07)
 
-| # | 영역 | 파일/위치 | 설명 | 권장 조치 |
+| # | 영역 | 파일/위치 | 설명 | 조치 결과 |
 |---|------|-----------|------|-----------|
-| C13 | 영속성 | `core/src/storage.rs:106-107` | **SessionLogger header/footer write 후 flush 미보장** | write 후 즉시 `flush()` 호출 |
-| C14 | 영속성 | `core/src/wrapper.rs:598-614` | **log_session_start/end 에러 무시 (`let _ =`)** — 세션 메타데이터 손실 | 실패 시 최소 `eprintln!` 추가 |
+| ~~C13~~ | 영속성 | `core/src/storage.rs:106-107` | ~~**SessionLogger header/footer write 후 flush 미보장**~~ | ✅ **해결**: `write_session_header`에 `self.flush()?;` 추가. `write_session_footer`는 기존 flush 존재 확인. 비정상 종료 시 세션 헤더 손실 방지 |
+| ~~C14~~ | 영속성 | `core/src/wrapper.rs:619-642` | ~~**log_session_start/end 에러 무시 (`let _ =`)**~~ — 세션 메타데이터 손실 | ✅ **해결**: `let _ =` → `if let Err(e)` 패턴으로 변경. `log_session_start` 실패 시 `eprintln!("[agent-watch] Warning: Failed to log session start: {e}")`, `log_session_end` 실패 시 write/flush 각각 경고 출력 |
 
 ### 2.5 접근성/국제화
 
@@ -295,8 +295,8 @@
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🔴 Critical | `core/src/storage.rs:106-107,119` | **header/footer flush 미보장** | write 후 즉시 flush |
-| 2 | 🔴 Critical | `core/src/wrapper.rs:598-614` | **session start/end 에러 무시** | eprintln! 추가 |
+| 1 | ~~🔴 Critical~~ 🟢 | `core/src/storage.rs:106-107,119` | ~~**header/footer flush 미보장**~~ | ✅ `write_session_header`에 `self.flush()?;` 추가 |
+| 2 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:619-642` | ~~**session start/end 에러 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
 | 3 | 🟠 Major | `core/src/storage.rs:126-130` | **write_event flush 미호출** — 비정상 종료 시 손실 | N개 이벤트마다 auto-flush |
 | 4 | 🟠 Major | 전체 | **DB 미사용** — JSONL 파일만 사용 | SQLite 도입 고려 |
 | 5 | 🟠 Major | `core/src/storage.rs:150-181` | **cleanup 삭제 실패 무시** | 경고 로그 및 실패 카운트 반환 |
@@ -385,15 +385,16 @@
 - ~~CI/CD 파이프라인 부재~~ ✅ 해결됨
 - ~~Swift 테스트 0개~~ ✅ 71개 테스트 추가
 - ~~동시성/메모리 관련 race condition 6건~~ ✅ 6건 모두 해결됨
+- ~~데이터 영속성 flush/에러 처리~~ ✅ 해결됨
 - 접근성/i18n 미지원
 
 ### 프로덕션 배포 판단
 
-> **🔴 Critical ~~17건~~ → ~~14건~~ → ~~8건~~ → 5건 해결 필요** (12건 조치 완료)
+> **🔴 Critical ~~17건~~ → ~~14건~~ → ~~8건~~ → ~~5건~~ → 3건 해결 필요** (14건 조치 완료)
 > - ~~C1-C3: 인프라 (CI, Makefile, Swift 테스트)~~ ✅ 조치 완료
 > - ~~C4-C9: 동시성/메모리 안전성~~ ✅ 조치 완료
 > - ~~C10-C12: 에러 처리 (조용한 실패 방지)~~ ✅ 조치 완료
-> - C13-C14: 데이터 영속성 (flush 보장)
+> - ~~C13-C14: 데이터 영속성 (flush 보장)~~ ✅ 조치 완료
 > - C15-C17: 접근성/국제화
 
-다음 우선 과제: 데이터 영속성 (C13-C14) 및 접근성/국제화 (C15-C17) 개선.
+다음 우선 과제: 접근성/국제화 (C15-C17) 개선.

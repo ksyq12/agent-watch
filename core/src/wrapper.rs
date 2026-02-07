@@ -621,7 +621,9 @@ impl ProcessWrapper {
         let _ = self.logger.log_stdout(&event);
         if let Some(ref logger) = self.session_logger {
             if let Ok(mut l) = logger.lock() {
-                let _ = l.write_event(&event);
+                if let Err(e) = l.write_event(&event) {
+                    eprintln!("[agent-watch] Warning: Failed to log session start: {e}");
+                }
             }
         }
         self.emit_event(WrapperEvent::Event(event));
@@ -632,8 +634,12 @@ impl ProcessWrapper {
         let _ = self.logger.log_stdout(&event);
         if let Some(ref logger) = self.session_logger {
             if let Ok(mut l) = logger.lock() {
-                let _ = l.write_event(&event);
-                let _ = l.flush();
+                if let Err(e) = l.write_event(&event) {
+                    eprintln!("[agent-watch] Warning: Failed to log session end: {e}");
+                }
+                if let Err(e) = l.flush() {
+                    eprintln!("[agent-watch] Warning: Failed to flush session log: {e}");
+                }
             }
         }
         self.emit_event(WrapperEvent::Event(event));

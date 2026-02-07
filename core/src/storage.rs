@@ -104,6 +104,7 @@ impl SessionLogger {
             "type": "session_start"
         });
         writeln!(self.writer, "{}", header).map_err(StorageError::Write)?;
+        self.flush()?;
         Ok(())
     }
 
