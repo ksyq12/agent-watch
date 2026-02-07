@@ -116,3 +116,75 @@ struct SessionInfo: Identifiable, Hashable {
     let startTime: Date?
     let startTimeString: String
 }
+
+enum EventTypeFilter: String, CaseIterable {
+    case all
+    case command
+    case fileAccess
+    case network
+    case process
+
+    var label: String {
+        switch self {
+        case .all: return String(localized: "eventType.all")
+        case .command: return String(localized: "eventType.command")
+        case .fileAccess: return String(localized: "eventType.file")
+        case .network: return String(localized: "eventType.network")
+        case .process: return String(localized: "eventType.process")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .all: return "list.bullet"
+        case .command: return "terminal"
+        case .fileAccess: return "doc"
+        case .network: return "network"
+        case .process: return "gearshape"
+        }
+    }
+}
+
+enum DateRangePreset: String, CaseIterable {
+    case allTime
+    case today
+    case lastHour
+    case last24Hours
+    case last7Days
+    case custom
+
+    var label: String {
+        switch self {
+        case .allTime: return String(localized: "dateRange.allTime")
+        case .today: return String(localized: "dateRange.today")
+        case .lastHour: return String(localized: "dateRange.lastHour")
+        case .last24Hours: return String(localized: "dateRange.last24Hours")
+        case .last7Days: return String(localized: "dateRange.last7Days")
+        case .custom: return String(localized: "dateRange.custom")
+        }
+    }
+}
+
+// MARK: - Chart Data Types
+
+struct ChartDataPoint: Identifiable {
+    let id = UUID()
+    let timestamp: Date
+    let total: Int
+    let critical: Int
+    let high: Int
+    let medium: Int
+    let low: Int
+}
+
+struct RiskDistributionItem: Identifiable {
+    let id = UUID()
+    let level: String
+    let count: Int
+}
+
+struct EventTypeCount: Identifiable {
+    let id = UUID()
+    let type: String
+    let count: Int
+}

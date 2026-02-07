@@ -71,6 +71,72 @@ final class CoreBridge {
         }
     }
 
+    // MARK: - v0.4.0 FFI Functions
+
+    func readSessionLogPaginated(path: String, offset: UInt32, limit: UInt32) -> [MonitoringEvent] {
+        do {
+            let ffiEvents = try macagentwatch_core.readSessionLogPaginated(path: path, offset: offset, limit: limit)
+            return ffiEvents.map { Self.convertEvent($0) }
+        } catch {
+            print("[CoreBridge] Warning: FFI readSessionLogPaginated failed: \(error)")
+            return []
+        }
+    }
+
+    func getSessionEventCount(path: String) -> Int {
+        do {
+            let count = try macagentwatch_core.getSessionEventCount(path: path)
+            return Int(count)
+        } catch {
+            print("[CoreBridge] Warning: FFI getSessionEventCount failed: \(error)")
+            return 0
+        }
+    }
+
+    func getChartData(path: String, bucketMinutes: UInt32 = 60) -> [ChartDataPoint] {
+        do {
+            let ffiPoints = try macagentwatch_core.getChartData(path: path, bucketMinutes: bucketMinutes)
+            return ffiPoints.map { Self.convertChartDataPoint($0) }
+        } catch {
+            print("[CoreBridge] Warning: FFI getChartData failed: \(error)")
+            return []
+        }
+    }
+
+    func searchEvents(
+        path: String,
+        query: String,
+        eventTypeFilter: String? = nil,
+        riskLevelFilter: FfiRiskLevel? = nil,
+        startTimeMs: Int64? = nil,
+        endTimeMs: Int64? = nil
+    ) -> [MonitoringEvent] {
+        do {
+            let ffiEvents = try macagentwatch_core.searchEvents(
+                path: path,
+                query: query,
+                eventTypeFilter: eventTypeFilter,
+                riskLevelFilter: riskLevelFilter,
+                startTimeMs: startTimeMs,
+                endTimeMs: endTimeMs
+            )
+            return ffiEvents.map { Self.convertEvent($0) }
+        } catch {
+            print("[CoreBridge] Warning: FFI searchEvents failed: \(error)")
+            return []
+        }
+    }
+
+    func getLatestEvents(path: String, sinceIndex: UInt32) -> [MonitoringEvent] {
+        do {
+            let ffiEvents = try macagentwatch_core.getLatestEvents(path: path, sinceIndex: sinceIndex)
+            return ffiEvents.map { Self.convertEvent($0) }
+        } catch {
+            print("[CoreBridge] Warning: FFI getLatestEvents failed: \(error)")
+            return []
+        }
+    }
+
     // MARK: - Monitoring Engine Management
 
     func startSession(processName: String) -> String? {
@@ -208,6 +274,18 @@ final class CoreBridge {
         summary.mediumCount = Int(ffiSummary.mediumCount)
         summary.lowCount = Int(ffiSummary.lowCount)
         return summary
+    }
+
+    private static func convertChartDataPoint(_ ffiPoint: FfiChartDataPoint) -> ChartDataPoint {
+        let timestamp = Date(timeIntervalSince1970: TimeInterval(ffiPoint.timestampMs) / 1000.0)
+        return ChartDataPoint(
+            timestamp: timestamp,
+            total: Int(ffiPoint.total),
+            critical: Int(ffiPoint.critical),
+            high: Int(ffiPoint.high),
+            medium: Int(ffiPoint.medium),
+            low: Int(ffiPoint.low)
+        )
     }
 
     // MARK: - Swift → FFI Type Conversions (for getActivitySummary)

@@ -11,12 +11,20 @@ final class MonitoringViewModel {
     var activitySummary: ActivitySummary = .empty
     var sessions: [SessionInfo] = []
     var selectedSession: SessionInfo?
+    var selectedEvent: MonitoringEvent?
     var isMonitoring: Bool = false
     var config: AppConfig = AppConfig()
     var version: String = ""
     var filterRiskLevel: RiskLevel? = nil
+    var searchQuery: String = ""
+    var eventTypeFilter: EventTypeFilter = .all
+    var dateRangePreset: DateRangePreset = .allTime
+    var customStartDate: Date? = nil
+    var customEndDate: Date? = nil
     var currentSessionId: String?
     var errorMessage: String?
+    var chartData: [ChartDataPoint] = []
+    var liveEventIndex: UInt32 = 0
 
     private let bridge = CoreBridge.shared
 
@@ -39,6 +47,27 @@ final class MonitoringViewModel {
 
         activitySummary = bridge.getActivitySummary(events: events)
         recentAlerts = events.filter { $0.alert }.prefix(5).map { $0 }
+        loadChartData()
+    }
+
+    func loadChartData() {
+        guard let session = selectedSession else {
+            chartData = []
+            return
+        }
+        chartData = bridge.getChartData(path: session.filePath)
+    }
+
+    func pollLatestEvents() {
+        guard let session = selectedSession else { return }
+        let newEvents = bridge.getLatestEvents(path: session.filePath, sinceIndex: liveEventIndex)
+        if !newEvents.isEmpty {
+            events.append(contentsOf: newEvents)
+            liveEventIndex += UInt32(newEvents.count)
+            trimEvents()
+            activitySummary = bridge.getActivitySummary(events: events)
+            recentAlerts = events.filter { $0.alert }.prefix(5).map { $0 }
+        }
     }
 
     func startMonitoring() {
@@ -72,8 +101,10 @@ final class MonitoringViewModel {
                 bridge.readSessionLog(path: filePath)
             }.value
             self.events = loadedEvents
+            self.liveEventIndex = UInt32(loadedEvents.count)
             self.activitySummary = bridge.getActivitySummary(events: self.events)
             self.recentAlerts = self.events.filter { $0.alert }.prefix(5).map { $0 }
+            self.loadChartData()
         }
     }
 
@@ -95,7 +126,64 @@ final class MonitoringViewModel {
     }
 
     var filteredEvents: [MonitoringEvent] {
-        guard let filter = filterRiskLevel else { return events }
-        return events.filter { $0.riskLevel == filter }
+        var result = events
+
+        // Risk level filter
+        if let riskFilter = filterRiskLevel {
+            result = result.filter { $0.riskLevel == riskFilter }
+        }
+
+        // Event type filter
+        if eventTypeFilter != .all {
+            result = result.filter { matchesEventType($0) }
+        }
+
+        // Text search
+        if !searchQuery.isEmpty {
+            result = result.filter { matchesSearch($0) }
+        }
+
+        // Date range
+        result = result.filter { matchesDateRange($0) }
+
+        return result
+    }
+
+    private func matchesEventType(_ event: MonitoringEvent) -> Bool {
+        switch (eventTypeFilter, event.eventType) {
+        case (.command, .command): return true
+        case (.fileAccess, .fileAccess): return true
+        case (.network, .network): return true
+        case (.process, .process): return true
+        default: return false
+        }
+    }
+
+    private func matchesSearch(_ event: MonitoringEvent) -> Bool {
+        let query = searchQuery.lowercased()
+        if event.eventType.description.lowercased().contains(query) { return true }
+        if event.process.lowercased().contains(query) { return true }
+        if event.riskLevel.rawValue.lowercased().contains(query) { return true }
+        return false
+    }
+
+    private func matchesDateRange(_ event: MonitoringEvent) -> Bool {
+        let now = Date()
+        switch dateRangePreset {
+        case .allTime:
+            return true
+        case .today:
+            return Calendar.current.isDateInToday(event.timestamp)
+        case .lastHour:
+            return event.timestamp >= now.addingTimeInterval(-3600)
+        case .last24Hours:
+            return event.timestamp >= now.addingTimeInterval(-86400)
+        case .last7Days:
+            return event.timestamp >= now.addingTimeInterval(-604800)
+        case .custom:
+            let afterStart = customStartDate.map { event.timestamp >= $0 } ?? true
+            let beforeEnd = customEndDate.map { event.timestamp <= $0 } ?? true
+            return afterStart && beforeEnd
+        }
     }
 }

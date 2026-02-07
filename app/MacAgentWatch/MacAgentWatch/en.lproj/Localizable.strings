@@ -32,9 +32,28 @@
 "action.quit" = "Quit MacAgentWatch";
 
 // MARK: - Filter
-"filter.label" = "Filter:";
+"filter.label" = "Risk:";
 "filter.all" = "All";
+"filter.type.label" = "Type:";
 "filter.events.count" = "%lld events";
+"filter.search.placeholder" = "Search events...";
+"filter.date.from" = "From:";
+"filter.date.to" = "To:";
+
+// MARK: - Event Type Filter
+"eventType.all" = "All";
+"eventType.command" = "Command";
+"eventType.file" = "File";
+"eventType.network" = "Network";
+"eventType.process" = "Process";
+
+// MARK: - Date Range Presets
+"dateRange.allTime" = "All Time";
+"dateRange.today" = "Today";
+"dateRange.lastHour" = "Last Hour";
+"dateRange.last24Hours" = "Last 24h";
+"dateRange.last7Days" = "Last 7 Days";
+"dateRange.custom" = "Custom...";
 
 // MARK: - Sessions
 "sessions.title" = "Sessions";
@@ -70,4 +89,84 @@
 "a11y.alert.value" = "Alert is active";
 "a11y.dashboard.card.hint" = "Displays count of events at this severity level";
 "a11y.filter.chip.hint" = "Double-tap to filter events by this risk level";
+"a11y.filter.eventType.hint" = "Double-tap to filter events by this type";
+"a11y.filter.search" = "Search events";
+"a11y.filter.search.hint" = "Type to filter events by text content";
+"a11y.filter.search.clear" = "Clear search";
+"a11y.filter.dateRange" = "Date range filter";
+"a11y.filter.dateRange.hint" = "Choose a time range to filter events";
+"a11y.filter.date.start" = "Start date";
+"a11y.filter.date.end" = "End date";
 "a11y.events.list.hint" = "Scroll to browse monitoring events";
+
+// MARK: - Dashboard Tabs
+"tab.events" = "Events";
+"tab.livelog" = "Live Log";
+"tab.charts" = "Charts";
+"dashboard.tab" = "View";
+"a11y.dashboard.tab.picker" = "Select dashboard view";
+
+// MARK: - Live Log View
+"livelog.title" = "Live Log";
+"livelog.status.live" = "Live";
+"livelog.pause" = "Pause";
+"livelog.resume" = "Resume";
+"livelog.clear" = "Clear";
+"a11y.livelog.status.live" = "Live log is streaming";
+"a11y.livelog.toggle.hint" = "Double-tap to toggle live streaming";
+"a11y.livelog.clear.hint" = "Double-tap to clear all log entries";
+
+// MARK: - Charts View
+"charts.period" = "Period";
+"charts.period.24h" = "24h";
+"charts.period.7d" = "7d";
+"charts.period.30d" = "30d";
+"charts.activity.title" = "Activity Timeline";
+"charts.risk.distribution" = "Risk Distribution";
+"charts.event.types" = "Event Types";
+"charts.risk" = "Risk";
+"charts.axis.time" = "Time";
+"charts.axis.count" = "Count";
+"charts.axis.type" = "Type";
+"a11y.charts.period.picker" = "Select time period for charts";
+"a11y.charts.activity.timeline" = "Activity timeline chart showing events over time by risk level";
+"a11y.charts.risk.distribution" = "Donut chart showing distribution of events by risk level";
+"a11y.charts.event.types" = "Bar chart showing count of events by type";
+
+// MARK: - Event Detail View
+"detail.section.event" = "Event Details";
+"detail.section.command" = "Command Details";
+"detail.section.file" = "File Access Details";
+"detail.section.network" = "Network Details";
+"detail.section.process" = "Process Details";
+"detail.section.session" = "Session Details";
+"detail.id" = "ID";
+"detail.time" = "Time";
+"detail.process" = "Process";
+"detail.pid" = "PID";
+"detail.ppid" = "PPID";
+"detail.risk" = "Risk";
+"detail.alert" = "Alert";
+"detail.alert.yes" = "Yes";
+"detail.alert.no" = "No";
+"detail.command" = "Command";
+"detail.arguments" = "Arguments";
+"detail.exitCode" = "Exit Code";
+"detail.path" = "Path";
+"detail.action" = "Action";
+"detail.host" = "Host";
+"detail.port" = "Port";
+"detail.protocol" = "Protocol";
+"detail.none" = "(none)";
+
+// MARK: - Event Type Labels
+"event.type.command" = "Command";
+"event.type.fileAccess" = "File Access";
+"event.type.network" = "Network";
+"event.type.process" = "Process";
+"event.type.session" = "Session";
+
+// MARK: - Event Detail Accessibility
+"a11y.detail.panel" = "Event detail panel";
+"a11y.detail.close" = "Close detail panel";
+"a11y.detail.copy" = "Copy %@ to clipboard";

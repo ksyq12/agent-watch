@@ -138,6 +138,16 @@ pub struct FfiSessionInfo {
     pub start_time_str: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FfiChartDataPoint {
+    pub timestamp_ms: i64,
+    pub total: u32,
+    pub critical: u32,
+    pub high: u32,
+    pub medium: u32,
+    pub low: u32,
+}
+
 // ─── FFI Error Type ───────────────────────────────────────────────────────────
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -447,6 +457,194 @@ pub fn get_activity_summary(events: Vec<FfiEvent>) -> Result<FfiActivitySummary,
     }
 
     Ok(summary)
+}
+
+// ─── Helper: parse events from JSONL file ─────────────────────────────────────
+
+/// Parse events from a JSONL session file, returning (Event, line_index) pairs.
+/// Skips session metadata lines (session_start/session_end) and empty lines.
+fn parse_events_from_file(path: &str) -> Result<Vec<Event>, FfiError> {
+    let file = std::fs::File::open(path).map_err(|e| FfiError::Io {
+        message: format!("Failed to open {}: {}", path, e),
+    })?;
+    let reader = std::io::BufReader::new(file);
+    let mut events = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| FfiError::Io {
+            message: format!("Failed to read line: {}", e),
+        })?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<Event>(trimmed) {
+            Ok(event) => events.push(event),
+            Err(_) => {
+                // Skip session metadata lines and invalid lines
+            }
+        }
+    }
+
+    Ok(events)
+}
+
+// ─── New Exported Functions (v0.4.0) ──────────────────────────────────────────
+
+#[uniffi::export]
+pub fn read_session_log_paginated(
+    path: String,
+    offset: u32,
+    limit: u32,
+) -> Result<Vec<FfiEvent>, FfiError> {
+    let events = parse_events_from_file(&path)?;
+    let offset = offset as usize;
+    let limit = limit as usize;
+
+    let paginated: Vec<FfiEvent> = events
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(FfiEvent::from)
+        .collect();
+
+    Ok(paginated)
+}
+
+#[uniffi::export]
+pub fn get_session_event_count(path: String) -> Result<u32, FfiError> {
+    let events = parse_events_from_file(&path)?;
+    Ok(events.len() as u32)
+}
+
+#[uniffi::export]
+pub fn get_chart_data(
+    path: String,
+    bucket_minutes: u32,
+) -> Result<Vec<FfiChartDataPoint>, FfiError> {
+    let bucket_minutes = if bucket_minutes == 0 { 60 } else { bucket_minutes };
+    let bucket_ms: i64 = bucket_minutes as i64 * 60 * 1000;
+
+    let events = parse_events_from_file(&path)?;
+    if events.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut buckets: std::collections::BTreeMap<i64, FfiChartDataPoint> =
+        std::collections::BTreeMap::new();
+
+    for event in &events {
+        let ts = event.timestamp.timestamp_millis();
+        let bucket_key = (ts / bucket_ms) * bucket_ms;
+
+        let point = buckets.entry(bucket_key).or_insert(FfiChartDataPoint {
+            timestamp_ms: bucket_key,
+            total: 0,
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+        });
+
+        point.total += 1;
+        match event.risk_level {
+            RiskLevel::Critical => point.critical += 1,
+            RiskLevel::High => point.high += 1,
+            RiskLevel::Medium => point.medium += 1,
+            RiskLevel::Low => point.low += 1,
+        }
+    }
+
+    Ok(buckets.into_values().collect())
+}
+
+#[uniffi::export]
+pub fn search_events(
+    path: String,
+    query: String,
+    event_type_filter: Option<String>,
+    risk_level_filter: Option<FfiRiskLevel>,
+    start_time_ms: Option<i64>,
+    end_time_ms: Option<i64>,
+) -> Result<Vec<FfiEvent>, FfiError> {
+    let events = parse_events_from_file(&path)?;
+    let query_lower = query.to_lowercase();
+
+    let filtered: Vec<FfiEvent> = events
+        .into_iter()
+        .filter(|event| {
+            // Time range filter
+            let ts = event.timestamp.timestamp_millis();
+            if let Some(start) = start_time_ms {
+                if ts < start {
+                    return false;
+                }
+            }
+            if let Some(end) = end_time_ms {
+                if ts > end {
+                    return false;
+                }
+            }
+
+            // Risk level filter
+            if let Some(ref rl) = risk_level_filter {
+                let event_rl: FfiRiskLevel = event.risk_level.into();
+                if event_rl != *rl {
+                    return false;
+                }
+            }
+
+            // Event type filter
+            if let Some(ref et_filter) = event_type_filter {
+                let matches_type = match et_filter.as_str() {
+                    "command" => matches!(event.event_type, EventType::Command { .. }),
+                    "file_access" => matches!(event.event_type, EventType::FileAccess { .. }),
+                    "network" => matches!(event.event_type, EventType::Network { .. }),
+                    "process" => matches!(event.event_type, EventType::Process { .. }),
+                    _ => true,
+                };
+                if !matches_type {
+                    return false;
+                }
+            }
+
+            // Full-text search across command, file path, host fields
+            if query_lower.is_empty() {
+                return true;
+            }
+            match &event.event_type {
+                EventType::Command { command, args, .. } => {
+                    command.to_lowercase().contains(&query_lower)
+                        || args.iter().any(|a| a.to_lowercase().contains(&query_lower))
+                }
+                EventType::FileAccess { path, .. } => {
+                    path.to_string_lossy().to_lowercase().contains(&query_lower)
+                }
+                EventType::Network { host, .. } => {
+                    host.to_lowercase().contains(&query_lower)
+                }
+                EventType::Process { .. } => false,
+                EventType::Session { .. } => false,
+            }
+        })
+        .map(FfiEvent::from)
+        .collect();
+
+    Ok(filtered)
+}
+
+#[uniffi::export]
+pub fn get_latest_events(path: String, since_index: u32) -> Result<Vec<FfiEvent>, FfiError> {
+    let events = parse_events_from_file(&path)?;
+    let since = since_index as usize;
+
+    let latest: Vec<FfiEvent> = events
+        .into_iter()
+        .skip(since)
+        .map(FfiEvent::from)
+        .collect();
+
+    Ok(latest)
 }
 
 // ─── FfiMonitoringEngine Object ───────────────────────────────────────────────
@@ -974,5 +1172,339 @@ mod tests {
             message: "unknown".to_string(),
         };
         assert_eq!(err.to_string(), "unknown");
+    }
+
+    // ─── Helper: create a temp JSONL file with test events ────────────────────
+
+    fn create_test_session_file(events: &[Event]) -> (tempfile::TempDir, String) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let log_path = temp_dir.path().join("test-session.jsonl");
+
+        let mut content = String::new();
+        for event in events {
+            content.push_str(&serde_json::to_string(event).unwrap());
+            content.push('\n');
+        }
+        std::fs::write(&log_path, &content).unwrap();
+
+        let path_str = log_path.to_string_lossy().to_string();
+        (temp_dir, path_str)
+    }
+
+    fn sample_events() -> Vec<Event> {
+        vec![
+            Event::command(
+                "ls".to_string(),
+                vec!["-la".to_string()],
+                "bash".to_string(),
+                1,
+                RiskLevel::Low,
+            ),
+            Event::command(
+                "curl".to_string(),
+                vec!["http://example.com".to_string()],
+                "bash".to_string(),
+                2,
+                RiskLevel::Medium,
+            ),
+            Event::command(
+                "rm".to_string(),
+                vec!["-rf".to_string(), "dir".to_string()],
+                "bash".to_string(),
+                3,
+                RiskLevel::High,
+            ),
+            Event::command(
+                "rm".to_string(),
+                vec!["-rf".to_string(), "/".to_string()],
+                "bash".to_string(),
+                4,
+                RiskLevel::Critical,
+            ),
+            Event::command(
+                "echo".to_string(),
+                vec!["hello".to_string()],
+                "bash".to_string(),
+                5,
+                RiskLevel::Low,
+            ),
+        ]
+    }
+
+    // ─── Tests for new v0.4.0 FFI functions ───────────────────────────────────
+
+    #[test]
+    fn test_read_session_log_paginated_basic() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let result = read_session_log_paginated(path, 0, 10).unwrap();
+        assert_eq!(result.len(), 5);
+    }
+
+    #[test]
+    fn test_read_session_log_paginated_offset_limit() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let result = read_session_log_paginated(path.clone(), 1, 2).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].risk_level, FfiRiskLevel::Medium);
+        assert_eq!(result[1].risk_level, FfiRiskLevel::High);
+    }
+
+    #[test]
+    fn test_read_session_log_paginated_offset_beyond() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let result = read_session_log_paginated(path, 100, 10).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_read_session_log_paginated_nonexistent() {
+        let result = read_session_log_paginated("/nonexistent/path.jsonl".to_string(), 0, 10);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_session_event_count() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let count = get_session_event_count(path).unwrap();
+        assert_eq!(count, 5);
+    }
+
+    #[test]
+    fn test_get_session_event_count_empty() {
+        let (_dir, path) = create_test_session_file(&[]);
+        let count = get_session_event_count(path).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_get_session_event_count_with_metadata() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let log_path = temp_dir.path().join("test-session.jsonl");
+
+        let event = Event::command(
+            "ls".to_string(),
+            vec![],
+            "bash".to_string(),
+            1,
+            RiskLevel::Low,
+        );
+
+        let mut content = String::new();
+        content.push_str(r#"{"type":"session_start","session_id":"abc"}"#);
+        content.push('\n');
+        content.push_str(&serde_json::to_string(&event).unwrap());
+        content.push('\n');
+        content.push_str(r#"{"type":"session_end","exit_code":0}"#);
+        content.push('\n');
+        std::fs::write(&log_path, &content).unwrap();
+
+        let count = get_session_event_count(log_path.to_string_lossy().to_string()).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_get_session_event_count_nonexistent() {
+        let result = get_session_event_count("/nonexistent/path.jsonl".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_chart_data_basic() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let chart = get_chart_data(path, 60).unwrap();
+        assert!(!chart.is_empty());
+
+        // All events created at roughly the same time should be in one bucket
+        let total: u32 = chart.iter().map(|p| p.total).sum();
+        assert_eq!(total, 5);
+    }
+
+    #[test]
+    fn test_get_chart_data_risk_breakdown() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let chart = get_chart_data(path, 60).unwrap();
+        let total_low: u32 = chart.iter().map(|p| p.low).sum();
+        let total_medium: u32 = chart.iter().map(|p| p.medium).sum();
+        let total_high: u32 = chart.iter().map(|p| p.high).sum();
+        let total_critical: u32 = chart.iter().map(|p| p.critical).sum();
+
+        assert_eq!(total_low, 2);
+        assert_eq!(total_medium, 1);
+        assert_eq!(total_high, 1);
+        assert_eq!(total_critical, 1);
+    }
+
+    #[test]
+    fn test_get_chart_data_empty() {
+        let (_dir, path) = create_test_session_file(&[]);
+        let chart = get_chart_data(path, 60).unwrap();
+        assert!(chart.is_empty());
+    }
+
+    #[test]
+    fn test_get_chart_data_zero_bucket_defaults_to_60() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let chart = get_chart_data(path, 0).unwrap();
+        assert!(!chart.is_empty());
+    }
+
+    #[test]
+    fn test_search_events_by_query() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(path, "curl".to_string(), None, None, None, None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].risk_level, FfiRiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_search_events_case_insensitive() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(path, "CURL".to_string(), None, None, None, None).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_search_events_empty_query_returns_all() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(path, "".to_string(), None, None, None, None).unwrap();
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn test_search_events_by_event_type() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(
+            path,
+            "".to_string(),
+            Some("command".to_string()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn test_search_events_by_risk_level() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(
+            path,
+            "".to_string(),
+            None,
+            Some(FfiRiskLevel::Critical),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_search_events_by_time_range() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        // Use a very wide time range that includes all events
+        let results = search_events(
+            path.clone(),
+            "".to_string(),
+            None,
+            None,
+            Some(0),
+            Some(i64::MAX),
+        )
+        .unwrap();
+        assert_eq!(results.len(), 5);
+
+        // Use a time range in the far past — no events should match
+        let results = search_events(path, "".to_string(), None, None, Some(0), Some(1)).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_search_events_no_match() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = search_events(
+            path,
+            "nonexistent_command".to_string(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_search_events_in_args() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results =
+            search_events(path, "example.com".to_string(), None, None, None, None).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_get_latest_events_from_start() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = get_latest_events(path, 0).unwrap();
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn test_get_latest_events_from_middle() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = get_latest_events(path, 3).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].risk_level, FfiRiskLevel::Critical);
+        assert_eq!(results[1].risk_level, FfiRiskLevel::Low);
+    }
+
+    #[test]
+    fn test_get_latest_events_beyond_end() {
+        let events = sample_events();
+        let (_dir, path) = create_test_session_file(&events);
+
+        let results = get_latest_events(path, 100).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_get_latest_events_nonexistent() {
+        let result = get_latest_events("/nonexistent/path.jsonl".to_string(), 0);
+        assert!(result.is_err());
     }
 }
