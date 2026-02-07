@@ -115,11 +115,10 @@ impl Detector<PathBuf> for SensitiveFileDetector {
 
         // Try to resolve symlinks and check the resolved path
         // This prevents symlink-based bypasses
-        if let Ok(resolved) = item.canonicalize()
-            && resolved != *item
-            && self.matches_pattern(&resolved)
-        {
-            return true;
+        if let Ok(resolved) = item.canonicalize() {
+            if resolved != *item && self.matches_pattern(&resolved) {
+                return true;
+            }
         }
 
         false

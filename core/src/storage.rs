@@ -164,13 +164,14 @@ pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<usize,
         let entry = entry?;
         let path = entry.path();
 
-        if path.extension().and_then(|e| e.to_str()) == Some("jsonl")
-            && let Ok(metadata) = entry.metadata()
-            && let Ok(modified) = metadata.modified()
-        {
-            let modified: DateTime<Utc> = modified.into();
-            if modified < cutoff && std::fs::remove_file(&path).is_ok() {
-                removed += 1;
+        if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+            if let Ok(metadata) = entry.metadata() {
+                if let Ok(modified) = metadata.modified() {
+                    let modified: DateTime<Utc> = modified.into();
+                    if modified < cutoff && std::fs::remove_file(&path).is_ok() {
+                        removed += 1;
+                    }
+                }
             }
         }
     }

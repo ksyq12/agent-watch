@@ -12,7 +12,7 @@ use crate::risk::RiskScorer;
 use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
 use anyhow::{Context, Result};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -266,14 +266,14 @@ impl MonitoringOrchestrator {
 
         let handle = thread::spawn(move || {
             while let Ok(event) = fs_rx.recv() {
-                if let crate::event::EventType::FileAccess { ref path, action } = event.event_type
-                    && let Some(ref tx) = event_tx
-                {
-                    let _ = tx.send(WrapperEvent::FileAccess {
-                        path: path.clone(),
-                        action,
-                        risk_level: event.risk_level,
-                    });
+                if let crate::event::EventType::FileAccess { ref path, action } = event.event_type {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(WrapperEvent::FileAccess {
+                            path: path.clone(),
+                            action,
+                            risk_level: event.risk_level,
+                        });
+                    }
                 }
             }
         });
@@ -311,14 +311,15 @@ impl MonitoringOrchestrator {
                     port,
                     ref protocol,
                 } = event.event_type
-                    && let Some(ref tx) = event_tx
                 {
-                    let _ = tx.send(WrapperEvent::NetworkConnection {
-                        host: host.clone(),
-                        port,
-                        protocol: protocol.clone(),
-                        risk_level: event.risk_level,
-                    });
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(WrapperEvent::NetworkConnection {
+                            host: host.clone(),
+                            port,
+                            protocol: protocol.clone(),
+                            risk_level: event.risk_level,
+                        });
+                    }
                 }
             }
         });
@@ -491,7 +492,7 @@ impl ProcessWrapper {
         let writer_clone = Arc::clone(&writer);
 
         // Spawn stdin forwarding thread
-        let _stdin_handle = thread::spawn(move || {
+        let stdin_handle = thread::spawn(move || {
             let stdin = std::io::stdin();
             let mut stdin_lock = stdin.lock();
             let mut buffer = [0u8; 1024];
@@ -539,15 +540,15 @@ impl ProcessWrapper {
                             let line = line.trim_end_matches('\n');
 
                             // Simple command detection from shell prompts
-                            if let Some(cmd) = Self::detect_command(line)
-                                && let Some(ref tx) = event_tx
-                            {
-                                // Sanitize args before sending event
-                                let sanitized = crate::sanitize::sanitize_args(&cmd.1);
-                                let _ = tx.send(WrapperEvent::Command {
-                                    command: cmd.0.clone(),
-                                    args: sanitized,
-                                });
+                            if let Some(cmd) = Self::detect_command(line) {
+                                if let Some(ref tx) = event_tx {
+                                    // Sanitize args before sending event
+                                    let sanitized = crate::sanitize::sanitize_args(&cmd.1);
+                                    let _ = tx.send(WrapperEvent::Command {
+                                        command: cmd.0.clone(),
+                                        args: sanitized,
+                                    });
+                                }
                             }
                         }
                     }
@@ -566,10 +567,14 @@ impl ProcessWrapper {
         // Stop all monitoring
         orchestrator.stop();
 
-        // Signal I/O threads to stop and wait for them
+        // Shutdown sequence for I/O threads:
+        // 1. drop(writer) closes the PTY writer, causing the output reader to get EOF
+        // 2. output_handle exits once it reads EOF from the PTY master
+        // 3. stdin_handle exits because writer_clone.lock() succeeds but write_all
+        //    fails (broken pipe), or stdin itself reaches EOF
         drop(writer);
         let _ = output_handle.join();
-        // stdin_handle will exit when stdin closes or process exits
+        let _ = stdin_handle.join();
 
         // Emit exit event
         self.emit_event(WrapperEvent::Exited {
@@ -616,10 +621,10 @@ impl ProcessWrapper {
         let _ = self.logger.log_stdout(&event);
         self.emit_event(WrapperEvent::Event(event));
 
-        if let Some(reason) = reason
-            && risk_level >= RiskLevel::High
-        {
-            eprintln!("⚠️  Warning: {}", reason);
+        if let Some(reason) = reason {
+            if risk_level >= RiskLevel::High {
+                eprintln!("⚠️  Warning: {}", reason);
+            }
         }
 
         let status = cmd.status().context("Failed to execute command")?;
@@ -636,11 +641,12 @@ impl ProcessWrapper {
     fn log_session_start(&self, pid: u32) {
         let event = Event::session_start(self.config.command.clone(), pid);
         let _ = self.logger.log_stdout(&event);
-        if let Some(ref logger) = self.session_logger
-            && let Ok(mut l) = logger.lock()
-            && let Err(e) = l.write_event(&event)
-        {
-            eprintln!("[agent-watch] Warning: Failed to log session start: {e}");
+        if let Some(ref logger) = self.session_logger {
+            if let Ok(mut l) = logger.lock() {
+                if let Err(e) = l.write_event(&event) {
+                    eprintln!("[agent-watch] Warning: Failed to log session start: {e}");
+                }
+            }
         }
         self.emit_event(WrapperEvent::Event(event));
     }
@@ -648,14 +654,14 @@ impl ProcessWrapper {
     fn log_session_end(&self, pid: u32) {
         let event = Event::session_end(self.config.command.clone(), pid);
         let _ = self.logger.log_stdout(&event);
-        if let Some(ref logger) = self.session_logger
-            && let Ok(mut l) = logger.lock()
-        {
-            if let Err(e) = l.write_event(&event) {
-                eprintln!("[agent-watch] Warning: Failed to log session end: {e}");
-            }
-            if let Err(e) = l.flush() {
-                eprintln!("[agent-watch] Warning: Failed to flush session log: {e}");
+        if let Some(ref logger) = self.session_logger {
+            if let Ok(mut l) = logger.lock() {
+                if let Err(e) = l.write_event(&event) {
+                    eprintln!("[agent-watch] Warning: Failed to log session end: {e}");
+                }
+                if let Err(e) = l.flush() {
+                    eprintln!("[agent-watch] Warning: Failed to flush session log: {e}");
+                }
             }
         }
         self.emit_event(WrapperEvent::Event(event));

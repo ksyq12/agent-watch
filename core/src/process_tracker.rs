@@ -17,7 +17,7 @@ use libproc::bsd_info::BSDInfo;
 #[cfg(target_os = "macos")]
 use libproc::proc_pid::{pidinfo, pidpath};
 #[cfg(target_os = "macos")]
-use libproc::processes::{ProcFilter, pids_by_type};
+use libproc::processes::{pids_by_type, ProcFilter};
 
 /// Information about a tracked process
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ impl Default for TrackerConfig {
         Self {
             root_pid: 0,
             poll_interval: Duration::from_millis(100),
-            max_depth: None,
+            max_depth: Some(10),
         }
     }
 }
@@ -215,18 +215,42 @@ impl ProcessTracker {
         // Get all descendant PIDs
         let descendants = Self::get_descendants(config.root_pid, config.max_depth);
 
-        let mut tracked_guard = match tracked.lock() {
-            Ok(guard) => guard,
-            Err(_) => return,
-        };
+        // Phase 1: Find which PIDs are new and which have exited (short lock)
+        let (new_pids, exited_pids) = {
+            let tracked_guard = match tracked.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
 
-        // Find new processes
-        for pid in &descendants {
-            if tracked_guard.contains_key(pid) {
-                continue;
-            }
-            if let Some(process) = Self::get_process_info(*pid, risk_scorer) {
-                // Emit event
+            let new_pids: Vec<u32> = descendants
+                .iter()
+                .filter(|pid| !tracked_guard.contains_key(pid))
+                .copied()
+                .collect();
+
+            let exited_pids: Vec<u32> = tracked_guard
+                .keys()
+                .filter(|pid| !descendants.contains(pid))
+                .copied()
+                .collect();
+
+            (new_pids, exited_pids)
+        }; // Lock released here
+
+        // Phase 2: Get process info for new PIDs (slow syscalls, no lock held)
+        let new_processes: Vec<TrackedProcess> = new_pids
+            .iter()
+            .filter_map(|pid| Self::get_process_info(*pid, risk_scorer))
+            .collect();
+
+        // Phase 3: Update tracked map and emit events (short lock)
+        {
+            let mut tracked_guard = match tracked.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+
+            for process in new_processes {
                 if let Some(tx) = event_tx {
                     let _ = tx.send(TrackerEvent::ChildStarted {
                         pid: process.pid,
@@ -236,22 +260,14 @@ impl ProcessTracker {
                         risk_level: process.risk_level,
                     });
                 }
-
-                tracked_guard.insert(*pid, process);
+                tracked_guard.insert(process.pid, process);
             }
-        }
 
-        // Find exited processes
-        let exited: Vec<u32> = tracked_guard
-            .keys()
-            .filter(|pid| !descendants.contains(pid))
-            .copied()
-            .collect();
-
-        for pid in exited {
-            tracked_guard.remove(&pid);
-            if let Some(tx) = event_tx {
-                let _ = tx.send(TrackerEvent::ChildExited { pid });
+            for pid in exited_pids {
+                tracked_guard.remove(&pid);
+                if let Some(tx) = event_tx {
+                    let _ = tx.send(TrackerEvent::ChildExited { pid });
+                }
             }
         }
     }
@@ -363,7 +379,7 @@ mod tests {
         let config = TrackerConfig::default();
         assert_eq!(config.root_pid, 0);
         assert_eq!(config.poll_interval, Duration::from_millis(100));
-        assert!(config.max_depth.is_none());
+        assert_eq!(config.max_depth, Some(10));
     }
 
     #[test]

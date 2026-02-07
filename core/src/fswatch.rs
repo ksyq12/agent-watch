@@ -7,9 +7,9 @@ use crate::detector::{Detector, SensitiveFileDetector};
 use crate::event::{Event, EventType, FileAction, RiskLevel};
 use anyhow::Result;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -171,40 +171,38 @@ impl FileSystemWatcher {
         }
 
         // Use catch_unwind to ensure FSEvents cleanup even on panic (C6 fix)
-        let loop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            loop {
-                if stop_flag.load(Ordering::Relaxed) {
-                    break;
-                }
+        let loop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| loop {
+            if stop_flag.load(Ordering::Relaxed) {
+                break;
+            }
 
-                match fs_rx.recv_timeout(Duration::from_millis(100)) {
-                    Ok(fse) => {
-                        let path = PathBuf::from(&fse.path);
-                        let action = Self::flags_to_action(fse.flag);
+            match fs_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(fse) => {
+                    let path = PathBuf::from(&fse.path);
+                    let action = Self::flags_to_action(fse.flag);
 
-                        let risk_level = if detector.is_sensitive(&path) {
-                            RiskLevel::Critical
-                        } else {
-                            RiskLevel::Low
-                        };
+                    let risk_level = if detector.is_sensitive(&path) {
+                        RiskLevel::Critical
+                    } else {
+                        RiskLevel::Low
+                    };
 
-                        let event = Event::new(
-                            EventType::FileAccess {
-                                path: path.clone(),
-                                action,
-                            },
-                            "fswatch".to_string(),
-                            std::process::id(),
-                            risk_level,
-                        );
+                    let event = Event::new(
+                        EventType::FileAccess {
+                            path: path.clone(),
+                            action,
+                        },
+                        "fswatch".to_string(),
+                        std::process::id(),
+                        risk_level,
+                    );
 
-                        if let Some(ref tx) = event_tx {
-                            let _ = tx.send(event);
-                        }
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(event);
                     }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }));
 

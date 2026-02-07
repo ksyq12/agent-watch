@@ -8,7 +8,7 @@ use crate::event::{Event, EventType};
 use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -325,7 +325,7 @@ impl NetworkMonitor {
     /// Get network connections for a specific PID using libproc
     #[cfg(target_os = "macos")]
     fn get_connections_for_pid(pid: u32, config: &NetMonConfig) -> Vec<TrackedConnection> {
-        use libproc::libproc::file_info::{ListFDs, ProcFDType, pidfdinfo};
+        use libproc::libproc::file_info::{pidfdinfo, ListFDs, ProcFDType};
         use libproc::libproc::net_info::{SocketFDInfo, SocketInfoKind, TcpSIState};
         use libproc::libproc::proc_pid::listpidinfo;
 
@@ -353,7 +353,8 @@ impl NetworkMonitor {
 
             match kind {
                 SocketInfoKind::Tcp if config.track_tcp => {
-                    // Safety: accessing union field for TCP socket
+                    // SAFETY: We have verified `soi_kind` is `Tcp` above via the match arm,
+                    // so the `pri_tcp` union field is the active variant and safe to read.
                     let tcp = unsafe { socket_info.psi.soi_proto.pri_tcp };
                     let state: TcpSIState = tcp.tcpsi_state.into();
 
@@ -391,7 +392,8 @@ impl NetworkMonitor {
                     ));
                 }
                 SocketInfoKind::In if config.track_udp => {
-                    // Safety: accessing union field for In socket (UDP)
+                    // SAFETY: We have verified `soi_kind` is `In` above via the match arm,
+                    // so the `pri_in` union field is the active variant and safe to read.
                     let in_sock = unsafe { socket_info.psi.soi_proto.pri_in };
 
                     // Extract remote address and port for UDP
@@ -438,7 +440,8 @@ fn extract_ip_address(
     // vflag: 1 = IPv4, 2 = IPv6
     if vflag == 1 {
         // IPv4
-        // Safety: accessing union field for IPv4 address
+        // SAFETY: `vflag == 1` confirms this is an IPv4 socket, so `ina_46.i46a_addr4`
+        // is the active union variant containing the IPv4 address.
         let addr = unsafe { in_sock.insi_faddr.ina_46.i46a_addr4 };
         let ip = Ipv4Addr::from(u32::from_be(addr.s_addr));
 
@@ -450,7 +453,8 @@ fn extract_ip_address(
         Some(IpAddr::V4(ip))
     } else if vflag == 2 {
         // IPv6
-        // Safety: accessing union field for IPv6 address
+        // SAFETY: `vflag == 2` confirms this is an IPv6 socket, so `ina_6`
+        // is the active union variant containing the IPv6 address.
         let addr = unsafe { in_sock.insi_faddr.ina_6 };
         let ip = Ipv6Addr::from(addr.s6_addr);
 

@@ -356,11 +356,9 @@ verbose = true
     #[test]
     fn test_default_network_whitelist() {
         let config = MonitoringConfig::default();
-        assert!(
-            config
-                .network_whitelist
-                .contains(&"api.anthropic.com".to_string())
-        );
+        assert!(config
+            .network_whitelist
+            .contains(&"api.anthropic.com".to_string()));
         assert!(config.network_whitelist.contains(&"github.com".to_string()));
     }
 

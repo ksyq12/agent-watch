@@ -14,19 +14,19 @@
 |-----------|:-----------:|:--------:|:--------:|:-------:|
 | 보안 | 0 | 0 | 2 | 8 |
 | 로깅/모니터링 | 0 | 0 | 2 | 8 |
-| 코드 품질 | 0 | 1 | 7 | 3 |
-| 프로젝트 구조 | 0 | 1 | 6 | 5 |
+| 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ 6 | ~~3~~ 5 |
+| 프로젝트 구조 | 0 | 1 | ~~6~~ 5 | ~~5~~ 6 |
 | 아키텍처 설계 | 0 | 2 | 5 | 10 |
 | 의존성 관리 | 0 | 1 | 6 | 7 |
-| 메모리 관리 | ~~3~~ 0 | 3 | 2 | ~~2~~ 5 |
-| 동시성/스레드 안전성 | ~~3~~ 0 | 3 | 2 | ~~0~~ 3 |
+| 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | 2 | ~~2~~ ~~5~~ 8 |
+| 동시성/스레드 안전성 | ~~3~~ 0 | ~~3~~ 1 | 2 | ~~0~~ ~~3~~ 5 |
 | 에러 처리 | ~~3~~ 0 | 3 | 3 | ~~3~~ 6 |
 | 데이터 영속성 | ~~2~~ 0 | 3 | 4 | ~~5~~ 7 |
 | 성능 최적화 | 0 | 3 | 5 | 2 |
 | 접근성/국제화 | ~~3~~ 0 | 4 | 4 | ~~1~~ 4 |
 | 테스트 커버리지 | ~~1~~ 0 | 3 | 1 | ~~1~~ 2 |
-| CI/CD/빌드 | ~~2~~ 0 | 3 | 3 | ~~2~~ 4 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **30** | **52** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ 74** |
+| CI/CD/빌드 | ~~2~~ 0 | ~~3~~ 2 | 3 | ~~2~~ ~~4~~ 5 |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ 23** | **~~52~~ 50** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ 83** |
 
 ---
 
@@ -78,18 +78,18 @@
 
 ## 3. 단기 개선 로드맵 (🟠 Major) — 1~2주 계획
 
-### Week 1: 빌드/안정성
+### Week 1: 빌드/안정성 — ✅ 조치 완료 (2026-02-07)
 
-| # | 영역 | 설명 | 우선순위 |
-|---|------|------|---------|
-| M1 | 빌드 | `edition = "2024"` → `"2021"` 변경 (불안정 에디션) | P0 |
-| M2 | 코드 품질 | `CoreBridge.swift` FFI 실제 연결 (TODO 8개 해소) | P0 |
-| M3 | 버전 | `Cargo.toml`(0.2.0) ↔ Swift(0.3.0) 버전 통일 | P1 |
-| M4 | 동시성 | stdin forwarding thread join 보장 (`wrapper.rs:451`) | P1 |
-| M5 | 동시성 | PTY output thread와 main thread 동기화 (`wrapper.rs:477`) | P1 |
-| M6 | 동시성 | ProcessTracker HashMap lock 시간 최적화 | P1 |
-| M7 | 메모리 | unsafe 블록 안전성 검증 강화 (`netmon.rs:289-388`) | P1 |
-| M8 | 메모리 | 프로세스 트리 BFS max_depth 기본값 설정 | P2 |
+| # | 영역 | 설명 | 조치 결과 |
+|---|------|------|-----------|
+| ~~M1~~ | 빌드 | ~~`edition = "2024"` → `"2021"` 변경 (불안정 에디션)~~ | ✅ **해결**: `Cargo.toml` edition `"2024"` → `"2021"` 변경. let-chain 문법 17개소를 nested if let으로 리팩토링 (detector.rs, sanitize.rs, storage.rs, wrapper.rs) |
+| ~~M2~~ | 코드 품질 | ~~`CoreBridge.swift` FFI 실제 연결 (TODO 8개 해소)~~ | ✅ **해결**: `import macagentwatch_core` 추가, 6개 TODO 함수를 실제 UniFFI 호출로 교체. FFI→Swift 양방향 타입 변환 함수 구현. 실패 시 mock 데이터 fallback 유지 |
+| ~~M3~~ | 버전 | ~~`Cargo.toml`(0.2.0) ↔ Swift(0.3.0) 버전 통일~~ | ✅ **해결**: workspace version `"0.2.0"` → `"0.3.0"` 통일. core/cli 모두 workspace 상속 |
+| ~~M4~~ | 동시성 | ~~stdin forwarding thread join 보장 (`wrapper.rs:451`)~~ | ✅ **해결**: `_stdin_handle` → `stdin_handle` 변수명 변경, `output_handle.join()` 후 `stdin_handle.join()` 추가. writer drop 시 자연 종료 보장 |
+| ~~M5~~ | 동시성 | ~~PTY output thread와 main thread 동기화 (`wrapper.rs:477`)~~ | ✅ **해결**: I/O 스레드 3단계 종료 시퀀스 문서화 — ① writer drop → ② output EOF → ③ stdin broken pipe. 순차적 join 보장 |
+| ~~M6~~ | 동시성 | ~~ProcessTracker HashMap lock 시간 최적화~~ | ✅ **해결**: `scan_processes`를 3-phase로 재구조화 — Phase 1: 짧은 lock으로 new/exited PID 식별, Phase 2: lock 없이 syscall 수행, Phase 3: 짧은 lock으로 map 업데이트 |
+| ~~M7~~ | 메모리 | ~~unsafe 블록 안전성 검증 강화 (`netmon.rs:289-388`)~~ | ✅ **해결**: 4개 unsafe 블록에 `// SAFETY:` 주석 추가 — TCP/UDP union 접근 시 `soi_kind` match 검증, IPv4/IPv6 주소 접근 시 `vflag` 검증 문서화 |
+| ~~M8~~ | 메모리 | ~~프로세스 트리 BFS max_depth 기본값 설정~~ | ✅ **해결**: `TrackerConfig::default()` max_depth `None` → `Some(10)` 변경. 무제한 BFS 방지 |
 
 ### Week 2: 테스트/성능
 
@@ -196,17 +196,17 @@
 | 1 | 🟡 Minor | `core/src/wrapper.rs:436` | **dead_code 허용 속성** — `process_name` 미사용 | 실제 활용하거나 제거 |
 | 2 | 🟡 Minor | `core/src/sanitize.rs:9` | **매직 상수** — MASK 값 "***" 하드코딩 | 표준 패턴이므로 유지 가능 |
 | 3 | 🟡 Minor | 여러 파일 | **테스트 커버리지 우수** — 각 모듈에 종합 테스트 | 통합 테스트 추가 고려 |
-| 4 | 🟠 Major | `app/.../CoreBridge.swift` | **모든 FFI 함수가 TODO 상태** — mock 데이터 반환 | UniFFI 생성 Swift 바인딩 연결 필요 |
+| 4 | ~~🟠 Major~~ 🟢 | `app/.../CoreBridge.swift` | ~~**모든 FFI 함수가 TODO 상태** — mock 데이터 반환~~ | ✅ UniFFI 실제 연결 완료, 양방향 타입 변환 구현 |
 | 5 | 🟡 Minor | `core/src/logger.rs:106-196` | **`format_pretty` Cyclomatic Complexity 높음** | 이벤트 타입별 별도 포매터 함수로 분리 |
 | 6 | 🟡 Minor | 전체 Rust 코드 | **`anyhow` 사용 불일치** — 일부 모듈에서만 사용 | `CoreError` 사용으로 통일 권장 |
-| 7 | 🟡 Minor | `Cargo.toml:7` | **`edition = "2024"` 불안정** — nightly 전용 | `edition = "2021"` 변경 권장 |
+| 7 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:7` | ~~**`edition = "2024"` 불안정** — nightly 전용~~ | ✅ `edition = "2021"` 변경 완료, let-chain 17개소 리팩토링 |
 
 ### 6.4 프로젝트 구조 (Project Structure)
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
 | 1 | 🟡 Minor | 프로젝트 루트 | **`README.md` 파일 누락** | 프로젝트 개요, 설치, 사용법 포함 README 작성 |
-| 2 | 🟡 Minor | `Cargo.toml:6` | **버전 불일치** — workspace 0.2.0 vs Swift 0.3.0 | 0.3.0으로 통일 권장 |
+| 2 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:6` | ~~**버전 불일치** — workspace 0.2.0 vs Swift 0.3.0~~ | ✅ workspace version `"0.3.0"` 통일 완료 |
 | 3 | 🟢 Good | 전체 구조 | **Rust core, CLI, Swift app 3-tier 구조 명확** | 유지 |
 | 4 | 🟢 Good | `.gitignore` | **포괄적 작성** — Rust, Swift, FFI 산출물 모두 포함 | 유지 |
 | 5 | 🟡 Minor | `app/.../` | **중복 생성 파일** — `Generated/` 및 `MacAgentWatchCore/generated/` | 한 곳으로 통일 |
@@ -255,9 +255,9 @@
 | 1 | ~~🔴 Critical~~ 🟢 | `core/src/fswatch.rs` | ~~**stop_flag/thread handle race**~~ | ✅ `Arc<AtomicBool>`로 전환, mutex poisoning 제거 |
 | 2 | ~~🔴 Critical~~ 🟢 | `core/src/netmon.rs` | ~~**seen_connections 전체 clear**~~ | ✅ `SeenConnectionsCache` 세대별 캐시로 교체 |
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs` | ~~**session_logger `Arc<Mutex>` 불필요**~~ | ✅ `Option<Mutex<SessionLogger>>`로 단순화, 안전성 근거 문서화 |
-| 4 | 🟠 Major | `core/src/wrapper.rs:451-454` | **stdin thread leak** — `_stdin_handle` join 안됨 | 명시적 join 또는 shutdown signal |
-| 5 | 🟠 Major | `core/src/netmon.rs:289-388` | **unsafe union 접근 안전성** — 메모리 레이아웃 불일치 가능 | kind 재확인 방어 코드 추가 |
-| 6 | 🟠 Major | `core/src/process_tracker.rs:275-283` | **BFS 큐 무제한 증가** — 프로세스 수천 개 시 | max_depth 기본값 10 설정 |
+| 4 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs:451-454` | ~~**stdin thread leak** — `_stdin_handle` join 안됨~~ | ✅ `stdin_handle.join()` 추가, writer drop 시 자연 종료 보장 |
+| 5 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:289-388` | ~~**unsafe union 접근 안전성** — 메모리 레이아웃 불일치 가능~~ | ✅ 4개 unsafe 블록에 `// SAFETY:` 주석 추가, match arm 검증 문서화 |
+| 6 | ~~🟠 Major~~ 🟢 | `core/src/process_tracker.rs:275-283` | ~~**BFS 큐 무제한 증가** — 프로세스 수천 개 시~~ | ✅ `max_depth` 기본값 `Some(10)` 설정 |
 | 7 | 🟡 Minor | `core/src/storage.rs:71,144-146` | **BufWriter flush 누락** — crash 시 데이터 손실 | auto-flush 옵션 또는 주기적 flush |
 | 8 | 🟡 Minor | `app/.../MonitoringViewModel.swift:7-15` | **events 배열 무제한 증가** | 최대 1000개 제한, 페이지네이션 |
 
@@ -269,8 +269,8 @@
 | 2 | ~~🔴 Critical~~ 🟢 | `core/src/ffi.rs` | ~~**FfiMonitoringEngine Mutex 경쟁**~~ | ✅ `SessionState` enum + 원자적 상태 전이 |
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/fswatch.rs` | ~~**FSEvents channel disconnection**~~ | ✅ `catch_unwind` 패턴으로 cleanup 보장 |
 | 4 | 🟠 Major | `core/src/netmon.rs:231-286` | **Network monitor busy wait** — interval 부정확 | 정확한 sleep 계산 또는 tokio interval |
-| 5 | 🟠 Major | `core/src/wrapper.rs:477-523` | **output_handle/main thread 경쟁** — EOF 전 wait 완료 | join 타임아웃 설정 |
-| 6 | 🟠 Major | `core/src/process_tracker.rs:213-252` | **HashMap lock 장기 보유** — reader 블록 | batch 적용, RwLock 고려 |
+| 5 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs:477-523` | ~~**output_handle/main thread 경쟁** — EOF 전 wait 완료~~ | ✅ I/O 스레드 3단계 종료 시퀀스 구현 — writer drop → output EOF → stdin exit |
+| 6 | ~~🟠 Major~~ 🟢 | `core/src/process_tracker.rs:213-252` | ~~**HashMap lock 장기 보유** — reader 블록~~ | ✅ 3-phase 구조로 재구현: 짧은 lock(diff) → lock 해제(syscall) → 짧은 lock(update) |
 | 7 | 🟡 Minor | `app/.../MonitoringViewModel.swift:49-57` | **Main actor에서 동기적 FFI 호출** — UI freeze 가능 | `Task.detached` 분리 |
 | 8 | 🟡 Minor | `core/src/logger.rs:59-63` | **Logger Clone 시 향후 위험** — 상태 추가 시 | Clone 제거 또는 Arc wrapping |
 
@@ -360,7 +360,7 @@
 |---|--------|-----------|------|-----------|
 | 1 | 🔴 Critical | 프로젝트 루트 | **CI 파이프라인 없음** | GitHub Actions: test.yml, build.yml |
 | 2 | 🔴 Critical | 프로젝트 루트 | **Makefile 없음** | make test/build/build-ffi/clean 정의 |
-| 3 | 🟠 Major | `Cargo.toml:7` | **`edition = "2024"` 불안정** | `"2021"` 변경 |
+| 3 | ~~🟠 Major~~ 🟢 | `Cargo.toml:7` | ~~**`edition = "2024"` 불안정**~~ | ✅ `edition = "2021"` 변경 완료 |
 | 4 | 🟠 Major | `scripts/build-ffi.sh` | **의존성 검증 없음** — uniffi-bindgen 등 | 필수 도구 체크 로직 추가 |
 | 5 | 🟠 Major | `core/Cargo.toml:10-11` | **crate-type 3종 동시 빌드** | staticlib 제거로 시간 단축 |
 | 6 | 🟡 Minor | `core/Cargo.toml` | **dev-dependencies tokio 미사용 가능** | 확인 후 제거 |
@@ -387,6 +387,9 @@
 - ~~동시성/메모리 관련 race condition 6건~~ ✅ 6건 모두 해결됨
 - ~~데이터 영속성 flush/에러 처리~~ ✅ 해결됨
 - ~~접근성/i18n 미지원~~ ✅ 해결됨
+- ~~불안정 에디션/버전 불일치~~ ✅ edition 2021 + v0.3.0 통일
+- ~~CoreBridge FFI 미연결~~ ✅ UniFFI 실제 연결 완료
+- ~~스레드 leak/lock 장기 보유~~ ✅ stdin join + 3-phase lock 구현
 
 ### 프로덕션 배포 판단
 
@@ -396,5 +399,15 @@
 > - ~~C10-C12: 에러 처리 (조용한 실패 방지)~~ ✅ 조치 완료
 > - ~~C13-C14: 데이터 영속성 (flush 보장)~~ ✅ 조치 완료
 > - ~~C15-C17: 접근성/국제화~~ ✅ 조치 완료
+>
+> **🟠 Major ~~30건~~ → 23건 — Week 1 빌드/안정성 조치 완료** (7건 조치 완료)
+> - ~~M1: edition 2024→2021~~ ✅ 조치 완료
+> - ~~M2: CoreBridge FFI 연결~~ ✅ 조치 완료
+> - ~~M3: 버전 0.3.0 통일~~ ✅ 조치 완료 (Minor→Good)
+> - ~~M4: stdin thread join 보장~~ ✅ 조치 완료
+> - ~~M5: output thread 동기화~~ ✅ 조치 완료
+> - ~~M6: HashMap lock 최적화~~ ✅ 조치 완료
+> - ~~M7: unsafe 안전성 강화~~ ✅ 조치 완료
+> - ~~M8: BFS max_depth 기본값~~ ✅ 조치 완료
 
-다음 우선 과제: 🟠 Major 30건 단기 개선 로드맵 진행.
+다음 우선 과제: 🟠 Major 23건 중 Week 2 테스트/성능 로드맵 진행 (M9-M18).

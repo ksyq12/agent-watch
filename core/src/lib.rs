@@ -40,8 +40,8 @@ uniffi::setup_scaffolding!();
 // Re-export commonly used types
 pub use config::{AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig};
 pub use detector::{
-    Detector, NetworkConnection, NetworkWhitelist, SensitiveFileDetector,
-    default_network_whitelist, default_sensitive_patterns,
+    default_network_whitelist, default_sensitive_patterns, Detector, NetworkConnection,
+    NetworkWhitelist, SensitiveFileDetector,
 };
 pub use error::{ConfigError, CoreError, StorageError};
 pub use event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
@@ -51,7 +51,7 @@ pub use netmon::{NetMonConfig, NetworkMonitor, NetworkTracker, TrackedConnection
 pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, TrackerEvent};
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
 pub use sanitize::{sanitize_args, sanitize_command_string};
-pub use storage::{EventStorage, SessionLogger, cleanup_old_logs};
+pub use storage::{cleanup_old_logs, EventStorage, SessionLogger};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 
 /// Library version
