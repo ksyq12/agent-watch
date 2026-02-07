@@ -521,6 +521,24 @@ impl NetworkMonitor {
     }
 }
 
+impl crate::types::MonitoringSubsystem for NetworkMonitor {
+    fn start(&mut self) -> anyhow::Result<()> {
+        NetworkMonitor::start(self)
+    }
+
+    fn stop(&mut self) {
+        NetworkMonitor::stop(self)
+    }
+
+    fn signal_stop(&self) {
+        NetworkMonitor::signal_stop(self)
+    }
+
+    fn is_running(&self) -> bool {
+        NetworkMonitor::is_running(self)
+    }
+}
+
 impl Drop for NetworkMonitor {
     fn drop(&mut self) {
         self.stop();

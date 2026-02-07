@@ -11,6 +11,7 @@ use crate::process_tracker::{ProcessTracker, TrackerConfig, TrackerEvent};
 use crate::risk::RiskScorer;
 use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
+use crate::types::MonitoringSubsystem;
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
@@ -220,28 +221,28 @@ impl MonitoringOrchestrator {
     /// This avoids the race condition where events are lost because one
     /// subsystem is still running while another is being torn down.
     fn stop(self) {
-        // Phase 1: Signal all subsystems to stop (non-blocking)
+        // Phase 1: Signal all subsystems to stop (non-blocking) via trait
         if let Some((ref tracker, _)) = self.tracker {
-            tracker.signal_stop();
+            MonitoringSubsystem::signal_stop(tracker);
         }
         if let Some((ref watcher, _)) = self.fs_watcher {
-            watcher.signal_stop();
+            MonitoringSubsystem::signal_stop(watcher);
         }
         if let Some((ref monitor, _)) = self.net_monitor {
-            monitor.signal_stop();
+            MonitoringSubsystem::signal_stop(monitor);
         }
 
-        // Phase 2: Stop subsystems and join all threads
+        // Phase 2: Stop subsystems and join forwarding threads
         if let Some((mut tracker, handle)) = self.tracker {
-            tracker.stop();
+            MonitoringSubsystem::stop(&mut tracker);
             let _ = handle.join();
         }
         if let Some((mut watcher, handle)) = self.fs_watcher {
-            watcher.stop();
+            MonitoringSubsystem::stop(&mut watcher);
             let _ = handle.join();
         }
         if let Some((mut monitor, handle)) = self.net_monitor {
-            monitor.stop();
+            MonitoringSubsystem::stop(&mut monitor);
             let _ = handle.join();
         }
     }
@@ -1159,14 +1160,14 @@ mod tests {
             MonitoringOrchestrator::start(&config, 1, &risk_scorer, &logger, &event_tx);
 
         // Give FSEvents time to start
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(500));
 
         // Create a file in the watched directory
         let test_file = temp_dir.path().join("orchestrator_test.txt");
         fs::write(&test_file, "test content").unwrap();
 
         // Wait for event delivery
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(1000));
 
         // Stop, drop, then join to avoid deadlock
         let MonitoringOrchestrator {

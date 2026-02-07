@@ -315,7 +315,7 @@ pub fn load_config() -> Result<FfiConfig, FfiError> {
 }
 
 #[uniffi::export]
-pub fn analyze_command(command: String, args: Vec<String>) -> FfiEvent {
+pub fn analyze_command(command: String, args: Vec<String>) -> Result<FfiEvent, FfiError> {
     let scorer = RiskScorer::new();
     let (risk_level, _reason) = scorer.score(&command, &args);
     let event = Event::command(
@@ -325,7 +325,7 @@ pub fn analyze_command(command: String, args: Vec<String>) -> FfiEvent {
         std::process::id(),
         risk_level,
     );
-    event.into()
+    Ok(event.into())
 }
 
 #[uniffi::export]
@@ -417,7 +417,7 @@ pub fn list_session_logs() -> Result<Vec<FfiSessionInfo>, FfiError> {
 }
 
 #[uniffi::export]
-pub fn get_activity_summary(events: Vec<FfiEvent>) -> FfiActivitySummary {
+pub fn get_activity_summary(events: Vec<FfiEvent>) -> Result<FfiActivitySummary, FfiError> {
     let mut summary = FfiActivitySummary {
         total_events: events.len() as u32,
         critical_count: 0,
@@ -435,7 +435,7 @@ pub fn get_activity_summary(events: Vec<FfiEvent>) -> FfiActivitySummary {
         }
     }
 
-    summary
+    Ok(summary)
 }
 
 // ─── FfiMonitoringEngine Object ───────────────────────────────────────────────
@@ -558,11 +558,11 @@ impl FfiMonitoringEngine {
         Ok(())
     }
 
-    pub fn is_active(&self) -> bool {
-        self.state
-            .lock()
-            .map(|guard| guard.0 == SessionState::Active)
-            .unwrap_or(false)
+    pub fn is_active(&self) -> Result<bool, FfiError> {
+        let guard = self.state.lock().map_err(|e| FfiError::Other {
+            message: format!("FfiMonitoringEngine lock poisoned in is_active: {}", e),
+        })?;
+        Ok(guard.0 == SessionState::Active)
     }
 }
 
@@ -793,13 +793,14 @@ mod tests {
 
     #[test]
     fn test_analyze_command_low_risk() {
-        let event = analyze_command("ls".to_string(), vec!["-la".to_string()]);
+        let event = analyze_command("ls".to_string(), vec!["-la".to_string()]).unwrap();
         assert_eq!(event.risk_level, FfiRiskLevel::Low);
     }
 
     #[test]
     fn test_analyze_command_medium_risk() {
-        let event = analyze_command("curl".to_string(), vec!["https://example.com".to_string()]);
+        let event =
+            analyze_command("curl".to_string(), vec!["https://example.com".to_string()]).unwrap();
         assert_eq!(event.risk_level, FfiRiskLevel::Medium);
     }
 
@@ -808,13 +809,15 @@ mod tests {
         let event = analyze_command(
             "rm".to_string(),
             vec!["-rf".to_string(), "directory".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(event.risk_level, FfiRiskLevel::High);
     }
 
     #[test]
     fn test_analyze_command_critical_risk() {
-        let event = analyze_command("rm".to_string(), vec!["-rf".to_string(), "/".to_string()]);
+        let event =
+            analyze_command("rm".to_string(), vec!["-rf".to_string(), "/".to_string()]).unwrap();
         assert_eq!(event.risk_level, FfiRiskLevel::Critical);
     }
 
@@ -836,13 +839,13 @@ mod tests {
     #[test]
     fn test_get_activity_summary() {
         let events = vec![
-            analyze_command("ls".to_string(), vec![]),
-            analyze_command("curl".to_string(), vec!["http://x.com".to_string()]),
-            analyze_command("sudo".to_string(), vec!["rm".to_string()]),
-            analyze_command("rm".to_string(), vec!["-rf".to_string(), "/".to_string()]),
-            analyze_command("echo".to_string(), vec!["hello".to_string()]),
+            analyze_command("ls".to_string(), vec![]).unwrap(),
+            analyze_command("curl".to_string(), vec!["http://x.com".to_string()]).unwrap(),
+            analyze_command("sudo".to_string(), vec!["rm".to_string()]).unwrap(),
+            analyze_command("rm".to_string(), vec!["-rf".to_string(), "/".to_string()]).unwrap(),
+            analyze_command("echo".to_string(), vec!["hello".to_string()]).unwrap(),
         ];
-        let summary = get_activity_summary(events);
+        let summary = get_activity_summary(events).unwrap();
         assert_eq!(summary.total_events, 5);
         assert!(summary.low_count >= 1);
         assert!(summary.medium_count >= 1);
@@ -852,7 +855,7 @@ mod tests {
 
     #[test]
     fn test_get_activity_summary_empty() {
-        let summary = get_activity_summary(vec![]);
+        let summary = get_activity_summary(vec![]).unwrap();
         assert_eq!(summary.total_events, 0);
         assert_eq!(summary.critical_count, 0);
         assert_eq!(summary.high_count, 0);
@@ -914,21 +917,21 @@ mod tests {
     #[test]
     fn test_monitoring_engine_lifecycle() {
         let engine = FfiMonitoringEngine::new();
-        assert!(!engine.is_active());
+        assert!(!engine.is_active().unwrap());
     }
 
     #[test]
     fn test_monitoring_engine_start_stop() {
         let engine = FfiMonitoringEngine::new();
-        assert!(!engine.is_active());
+        assert!(!engine.is_active().unwrap());
 
         let result = engine.start_session("test-process".to_string());
         assert!(result.is_ok());
-        assert!(engine.is_active());
+        assert!(engine.is_active().unwrap());
 
         let stop_result = engine.stop_session();
         assert!(stop_result.is_ok());
-        assert!(!engine.is_active());
+        assert!(!engine.is_active().unwrap());
     }
 
     #[test]

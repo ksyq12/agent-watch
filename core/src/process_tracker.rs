@@ -164,6 +164,11 @@ impl ProcessTracker {
         self.stop_flag.store(true, Ordering::Relaxed);
     }
 
+    /// Check if the tracker is running
+    pub fn is_running(&self) -> bool {
+        self.thread_handle.is_some() && !self.stop_flag.load(Ordering::Relaxed)
+    }
+
     /// Get currently tracked processes
     pub fn get_tracked(&self) -> Vec<TrackedProcess> {
         if let Ok(tracked) = self.tracked.lock() {
@@ -382,6 +387,25 @@ impl ProcessTracker {
     #[cfg(not(target_os = "macos"))]
     fn get_process_info(_pid: u32, _risk_scorer: &RiskScorer) -> Option<TrackedProcess> {
         None
+    }
+}
+
+impl crate::types::MonitoringSubsystem for ProcessTracker {
+    fn start(&mut self) -> anyhow::Result<()> {
+        ProcessTracker::start(self);
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        ProcessTracker::stop(self)
+    }
+
+    fn signal_stop(&self) {
+        ProcessTracker::signal_stop(self)
+    }
+
+    fn is_running(&self) -> bool {
+        ProcessTracker::is_running(self)
     }
 }
 

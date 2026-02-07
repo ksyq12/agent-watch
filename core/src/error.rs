@@ -103,6 +103,10 @@ pub enum StorageError {
     /// Failed to flush buffer
     #[error("Failed to flush log buffer: {0}")]
     Flush(std::io::Error),
+
+    /// SQLite error
+    #[error("SQLite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
 }
 
 /// Convenience type alias

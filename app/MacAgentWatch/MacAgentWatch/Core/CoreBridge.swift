@@ -20,8 +20,18 @@ final class CoreBridge {
     }
 
     func analyzeCommand(command: String, args: [String]) -> MonitoringEvent {
-        let ffiEvent = macagentwatch_core.analyzeCommand(command: command, args: args)
-        return Self.convertEvent(ffiEvent)
+        do {
+            let ffiEvent = try macagentwatch_core.analyzeCommand(command: command, args: args)
+            return Self.convertEvent(ffiEvent)
+        } catch {
+            print("[CoreBridge] Warning: FFI analyzeCommand failed: \(error), using fallback")
+            return MonitoringEvent(
+                id: UUID().uuidString,
+                timestamp: Date(),
+                eventType: .command(command: command, args: args, exitCode: nil),
+                process: "unknown", pid: 0, riskLevel: .low, alert: false
+            )
+        }
     }
 
     func getVersion() -> String {
@@ -49,9 +59,14 @@ final class CoreBridge {
     }
 
     func getActivitySummary(events: [MonitoringEvent]) -> ActivitySummary {
-        let ffiEvents = events.map { Self.convertToFfiEvent($0) }
-        let ffiSummary = macagentwatch_core.getActivitySummary(events: ffiEvents)
-        return Self.convertActivitySummary(ffiSummary)
+        do {
+            let ffiEvents = events.map { Self.convertToFfiEvent($0) }
+            let ffiSummary = try macagentwatch_core.getActivitySummary(events: ffiEvents)
+            return Self.convertActivitySummary(ffiSummary)
+        } catch {
+            print("[CoreBridge] Warning: FFI getActivitySummary failed: \(error), using empty summary")
+            return ActivitySummary()
+        }
     }
 
     // MARK: - FFI → Swift Type Conversions

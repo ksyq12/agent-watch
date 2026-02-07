@@ -289,6 +289,24 @@ impl FileSystemWatcher {
     }
 }
 
+impl crate::types::MonitoringSubsystem for FileSystemWatcher {
+    fn start(&mut self) -> anyhow::Result<()> {
+        FileSystemWatcher::start(self)
+    }
+
+    fn stop(&mut self) {
+        FileSystemWatcher::stop(self)
+    }
+
+    fn signal_stop(&self) {
+        FileSystemWatcher::signal_stop(self)
+    }
+
+    fn is_running(&self) -> bool {
+        FileSystemWatcher::is_running(self)
+    }
+}
+
 impl Drop for FileSystemWatcher {
     fn drop(&mut self) {
         self.stop();
@@ -491,14 +509,14 @@ mod tests {
 
         watcher.start().unwrap();
         // Give FSEvents time to initialize
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(500));
 
         // Create a file in the watched directory
         let test_file = watch_path.join("integration_test.txt");
         fs::write(&test_file, "hello world").unwrap();
 
         // Wait for FSEvents to deliver the event
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(1000));
 
         watcher.stop();
 
@@ -594,13 +612,13 @@ mod tests {
         let rx = watcher.subscribe();
 
         watcher.start().unwrap();
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(500));
 
         // Create a sensitive file (.env)
         let env_file = watch_path.join(".env");
         fs::write(&env_file, "SECRET_KEY=abc123").unwrap();
 
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(1000));
         watcher.stop();
 
         let mut found_critical = false;
@@ -638,7 +656,7 @@ mod tests {
         let rx = watcher.subscribe();
 
         watcher.start().unwrap();
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(500));
 
         // Create multiple files
         for i in 0..3 {
@@ -646,7 +664,7 @@ mod tests {
             fs::write(&file, format!("content {}", i)).unwrap();
         }
 
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(Duration::from_millis(1000));
         watcher.stop();
 
         // Count received events

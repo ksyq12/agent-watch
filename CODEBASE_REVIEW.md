@@ -16,7 +16,7 @@
 | 로깅/모니터링 | 0 | 0 | 2 | 8 |
 | 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ 6 | ~~3~~ 5 |
 | 프로젝트 구조 | 0 | 1 | ~~6~~ 5 | ~~5~~ 6 |
-| 아키텍처 설계 | 0 | 2 | 5 | 10 |
+| 아키텍처 설계 | 0 | 2 | ~~5~~ 3 | ~~10~~ 12 |
 | 의존성 관리 | 0 | 1 | 6 | 7 |
 | 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | 2 | ~~2~~ ~~5~~ 8 |
 | 동시성/스레드 안전성 | ~~3~~ 0 | ~~3~~ 1 | 2 | ~~0~~ ~~3~~ 5 |
@@ -26,7 +26,7 @@
 | 접근성/국제화 | ~~3~~ 0 | ~~4~~ 2 | 4 | ~~1~~ ~~4~~ 6 |
 | 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | 1 | ~~1~~ ~~2~~ 5 |
 | CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ 1 | 3 | ~~2~~ ~~4~~ ~~5~~ 6 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ 12** | **~~52~~ 50** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ 94** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ 12** | **~~52~~ ~~50~~ 48** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ 96** |
 
 ---
 
@@ -110,12 +110,12 @@
 
 ## 4. 장기 개선 제안 (🟡 Minor 및 아키텍처 방향)
 
-### 4.1 아키텍처
+### 4.1 아키텍처 — ✅ 조치 완료 (2026-02-07)
 
-- MonitoringOrchestrator를 `MonitoringSubsystem` trait으로 추상화하여 확장성 향상
-- FFI 함수 에러 반환 통일 (모두 `Result<T, FfiError>`)
-- 데이터베이스 도입 검토 (JSONL → SQLite, 대량 이벤트 쿼리 성능)
-- 타입을 별도 `types` 모듈로 분리하여 순환 의존성 예방
+- ~~MonitoringOrchestrator를 `MonitoringSubsystem` trait으로 추상화하여 확장성 향상~~ ✅ **해결**: `MonitoringSubsystem` trait 정의 (start/stop/signal_stop/is_running). FileSystemWatcher, NetworkMonitor, ProcessTracker 모두 구현. Orchestrator에서 trait 메서드로 호출
+- ~~FFI 함수 에러 반환 통일 (모두 `Result<T, FfiError>`)~~ ✅ **해결**: `analyze_command`, `get_activity_summary`, `is_active` 3개 함수 → `Result<T, FfiError>` 변경. lock poisoning 에러 메시지 구체화. Swift CoreBridge.swift do/catch 업데이트
+- ~~데이터베이스 도입 검토 (JSONL → SQLite, 대량 이벤트 쿼리 성능)~~ ✅ **해결**: `SqliteStorage` 구현 (`rusqlite` bundled). events/sessions 테이블 + 인덱스. `EventQuery` 필터링 (risk_level, event_type, session_id, 시간 범위). `StorageBackend` 설정 (Jsonl/Sqlite/Both). 기존 JSONL 유지, 12개 테스트 추가
+- ~~타입을 별도 `types` 모듈로 분리하여 순환 의존성 예방~~ ✅ **해결**: `core/src/types.rs` 생성. RiskLevel, FileAction, ProcessAction, SessionAction 이동. event.rs에서 re-export로 하위 호환성 유지
 
 ### 4.2 코드 품질
 
@@ -222,14 +222,14 @@
 | 1 | 🟢 Good | 전체 프로젝트 | **Clean Architecture 레이어 분리 우수** — Core ← FFI ← App 경계 명확 | 유지 |
 | 2 | 🟢 Good | `core/src/lib.rs` | **단일 진입점** — 중앙화된 re-export | 유지 |
 | 3 | 🟢 Good | `core/src/ffi.rs` | **FFI 경계 설계 우수** — UniFFI 타입 안전성 보장 | 유지 |
-| 4 | 🟡 Minor | `core/src/wrapper.rs:191-362` | **Orchestrator 책임 과다** | `MonitoringSubsystem` trait 추상화 고려 |
+| 4 | ~~🟡 Minor~~ 🟢 | `core/src/wrapper.rs:191-362` | ~~**Orchestrator 책임 과다**~~ | ✅ `MonitoringSubsystem` trait 추상화 완료. FSWatch/NetMon/ProcessTracker 모두 trait 구현 |
 | 5 | 🟢 Good | `core/src/detector.rs:10-18` | **Detector Trait 설계 우수** — Generic, Clone + Send | 유지 |
 | 6 | 🟠 Major | `core/src/ffi.rs:432-505` | **Mutex Lock poisoning 취약** | RwLock 또는 Channel 기반 대체 검토 |
 | 7 | 🟢 Good | `app/.../MonitoringViewModel.swift` | **MVVM 패턴 적용 우수** — @Observable 매크로 활용 | 유지 |
 | 8 | 🟢 Good | `core/src/storage.rs:13-21` | **EventStorage Trait** — 다양한 백엔드 지원 가능 | 유지 |
 | 9 | 🟢 Good | 전체 레이어 | **의존성 방향 준수** — 역방향 의존성 없음 | 유지 |
-| 10 | 🟡 Minor | `core/src/ffi.rs:308-430` | **FFI 에러 처리 일관성 부족** — 일부 빈 벡터 반환 | Result 타입으로 통일 |
-| 11 | 🟡 Minor | `core/src/netmon.rs:6` | **순환 의존성 가능성** — netmon ↔ detector | `types` 모듈 분리 |
+| 10 | ~~🟡 Minor~~ 🟢 | `core/src/ffi.rs:308-430` | ~~**FFI 에러 처리 일관성 부족**~~ | ✅ `analyze_command`, `get_activity_summary`, `is_active` → `Result<T, FfiError>` 통일 |
+| 11 | ~~🟡 Minor~~ 🟢 | `core/src/netmon.rs:6` | ~~**순환 의존성 가능성**~~ | ✅ `types` 모듈 분리 완료. RiskLevel 등 공유 타입 독립 모듈화 |
 | 12 | 🟠 Major | `core/src/netmon.rs:318-388` | **Unsafe 코드** — libproc union 접근 | safe wrapper 구현 고려 |
 
 ### 6.6 의존성 관리 (Dependency Management)

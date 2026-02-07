@@ -107,6 +107,19 @@ impl Default for GeneralConfig {
     }
 }
 
+/// Storage backend selection
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageBackend {
+    /// JSON Lines files (default)
+    #[default]
+    Jsonl,
+    /// SQLite database
+    Sqlite,
+    /// Both JSONL and SQLite
+    Both,
+}
+
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -117,6 +130,8 @@ pub struct LoggingConfig {
     pub log_dir: Option<PathBuf>,
     /// Log retention in days (0 = no limit)
     pub retention_days: u32,
+    /// Storage backend selection
+    pub storage_backend: StorageBackend,
 }
 
 impl Default for LoggingConfig {
@@ -125,6 +140,7 @@ impl Default for LoggingConfig {
             enabled: true,
             log_dir: None,
             retention_days: 30,
+            storage_backend: StorageBackend::default(),
         }
     }
 }

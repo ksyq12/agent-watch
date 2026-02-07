@@ -32,6 +32,9 @@ glob.workspace = true
 fsevent.workspace = true
 uniffi.workspace = true
 
+# SQLite storage
+rusqlite.workspace = true
+
 [dev-dependencies]
 tokio.workspace = true
 tempfile.workspace = true

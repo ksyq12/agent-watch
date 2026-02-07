@@ -32,26 +32,32 @@ pub mod netmon;
 pub mod process_tracker;
 pub mod risk;
 pub mod sanitize;
+pub mod sqlite_storage;
 pub mod storage;
+pub mod types;
 pub mod wrapper;
 
 uniffi::setup_scaffolding!();
 
 // Re-export commonly used types
-pub use config::{AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig};
+pub use config::{
+    AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig, StorageBackend,
+};
 pub use detector::{
     default_network_whitelist, default_sensitive_patterns, Detector, NetworkConnection,
     NetworkWhitelist, SensitiveFileDetector,
 };
 pub use error::{ConfigError, CoreError, StorageError};
-pub use event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
+pub use event::{Event, EventType};
 pub use fswatch::{FileMonitor, FileSystemWatcher, FsEvent, FsWatchConfig};
 pub use logger::{LogDestination, LogFormat, Logger, LoggerConfig};
 pub use netmon::{NetMonConfig, NetworkMonitor, NetworkTracker, TrackedConnection};
 pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, TrackerEvent};
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
 pub use sanitize::{sanitize_args, sanitize_command_string};
+pub use sqlite_storage::{EventQuery, SqliteStorage};
 pub use storage::{cleanup_old_logs, EventStorage, SessionLogger};
+pub use types::{FileAction, MonitoringSubsystem, ProcessAction, RiskLevel, SessionAction};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 
 /// Library version
