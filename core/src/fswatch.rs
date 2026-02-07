@@ -241,9 +241,9 @@ impl FileSystemWatcher {
             FileAction::Delete
         } else if flags.contains(StreamFlags::ITEM_CREATED) {
             FileAction::Create
-        } else if flags.contains(StreamFlags::ITEM_MODIFIED) {
-            FileAction::Write
-        } else if flags.contains(StreamFlags::ITEM_RENAMED) {
+        } else if flags.contains(StreamFlags::ITEM_MODIFIED)
+            || flags.contains(StreamFlags::ITEM_RENAMED)
+        {
             FileAction::Write
         } else if flags.contains(StreamFlags::ITEM_XATTR_MOD) {
             FileAction::Chmod
@@ -265,9 +265,7 @@ impl FileSystemWatcher {
             FileAction::Delete
         } else if flags & ITEM_CREATED != 0 {
             FileAction::Create
-        } else if flags & ITEM_MODIFIED != 0 {
-            FileAction::Write
-        } else if flags & ITEM_RENAMED != 0 {
+        } else if flags & ITEM_MODIFIED != 0 || flags & ITEM_RENAMED != 0 {
             FileAction::Write
         } else if flags & ITEM_XATTR_MOD != 0 {
             FileAction::Chmod

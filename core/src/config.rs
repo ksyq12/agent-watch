@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// General settings
@@ -20,17 +20,6 @@ pub struct Config {
     pub monitoring: MonitoringConfig,
     /// Alert settings
     pub alerts: AlertConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            logging: LoggingConfig::default(),
-            monitoring: MonitoringConfig::default(),
-            alerts: AlertConfig::default(),
-        }
-    }
 }
 
 impl Config {

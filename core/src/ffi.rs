@@ -460,6 +460,12 @@ pub struct FfiMonitoringEngine {
     state: Mutex<(SessionState, Option<MonitoringSession>)>,
 }
 
+impl Default for FfiMonitoringEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[uniffi::export]
 impl FfiMonitoringEngine {
     #[uniffi::constructor]

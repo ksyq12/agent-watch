@@ -200,28 +200,28 @@ fn analyze_command(
             let level_str = match level {
                 RiskLevel::Low => {
                     if no_color {
-                        format!("🟢 LOW")
+                        "🟢 LOW".to_string()
                     } else {
                         format!("🟢 {}", "LOW".green())
                     }
                 }
                 RiskLevel::Medium => {
                     if no_color {
-                        format!("🟡 MEDIUM")
+                        "🟡 MEDIUM".to_string()
                     } else {
                         format!("🟡 {}", "MEDIUM".yellow())
                     }
                 }
                 RiskLevel::High => {
                     if no_color {
-                        format!("🟠 HIGH")
+                        "🟠 HIGH".to_string()
                     } else {
                         format!("🟠 {}", "HIGH".bright_yellow().bold())
                     }
                 }
                 RiskLevel::Critical => {
                     if no_color {
-                        format!("🔴 CRITICAL")
+                        "🔴 CRITICAL".to_string()
                     } else {
                         format!("🔴 {}", "CRITICAL".red().bold())
                     }

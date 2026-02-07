@@ -215,19 +215,19 @@ fn mask_http_header(arg: &str) -> Option<String> {
     }
 
     // Full Authorization header format
-    if arg_lower.starts_with("authorization:") {
-        if let Some(colon_pos) = arg.find(':') {
-            let header_name = &arg[..colon_pos];
-            return Some(format!("{}: {}", header_name, MASK));
-        }
+    if arg_lower.starts_with("authorization:")
+        && let Some(colon_pos) = arg.find(':')
+    {
+        let header_name = &arg[..colon_pos];
+        return Some(format!("{}: {}", header_name, MASK));
     }
 
     // X-Api-Key header
-    if arg_lower.starts_with("x-api-key:") {
-        if let Some(colon_pos) = arg.find(':') {
-            let header_name = &arg[..colon_pos];
-            return Some(format!("{}: {}", header_name, MASK));
-        }
+    if arg_lower.starts_with("x-api-key:")
+        && let Some(colon_pos) = arg.find(':')
+    {
+        let header_name = &arg[..colon_pos];
+        return Some(format!("{}: {}", header_name, MASK));
     }
 
     None
@@ -296,7 +296,7 @@ fn shell_split(input: &str) -> Vec<String> {
                 in_double_quote = !in_double_quote;
                 // Don't include the quote character in the token
             }
-            '\\' if in_double_quote || (!in_single_quote && !in_double_quote) => {
+            '\\' if in_double_quote || !in_single_quote => {
                 // Escaped character — include the next char literally
                 if let Some(next) = chars.next() {
                     current.push(next);
