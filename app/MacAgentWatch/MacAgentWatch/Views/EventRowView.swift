@@ -3,9 +3,13 @@ import SwiftUI
 struct EventRowView: View {
     let event: MonitoringEvent
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .body) private var rowSpacing: CGFloat = 10
+    @ScaledMetric(relativeTo: .caption) private var indicatorWidth: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 24
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: rowSpacing) {
             riskIndicator
             eventIcon
             eventContent
@@ -15,6 +19,7 @@ struct EventRowView: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.riskLevel.label) risk, \(event.eventType.description), \(event.process), PID \(event.pid)")
+        .accessibilityHint(String(localized: "a11y.event.row.hint"))
     }
 
     // MARK: - Risk Indicator
@@ -23,7 +28,7 @@ struct EventRowView: View {
         Image(systemName: event.riskLevel.icon)
             .font(.caption)
             .foregroundStyle(contrast == .increased ? riskColorHighContrast : riskColor)
-            .frame(width: 20)
+            .frame(width: indicatorWidth)
             .accessibilityLabel(String(format: NSLocalizedString("a11y.risk.indicator", comment: ""), event.riskLevel.label))
     }
 
@@ -33,7 +38,7 @@ struct EventRowView: View {
         Image(systemName: event.eventType.icon)
             .font(.body)
             .foregroundStyle(.secondary)
-            .frame(width: 24)
+            .frame(width: iconWidth)
     }
 
     // MARK: - Content
@@ -67,8 +72,9 @@ struct EventRowView: View {
                 Image(systemName: "bell.badge.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .symbolEffect(.pulse, options: .repeating)
+                    .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
                     .accessibilityLabel(String(localized: "a11y.alert.badge"))
+                    .accessibilityValue(String(localized: "a11y.alert.value"))
                     .accessibilityRemoveTraits(.isImage)
             }
 

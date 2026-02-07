@@ -23,10 +23,10 @@
 | 에러 처리 | ~~3~~ 0 | ~~3~~ 2 | 3 | ~~3~~ ~~6~~ 7 |
 | 데이터 영속성 | ~~2~~ 0 | ~~3~~ 2 | 4 | ~~5~~ ~~7~~ 8 |
 | 성능 최적화 | 0 | ~~3~~ 0 | ~~5~~ 4 | ~~2~~ ~~5~~ 6 |
-| 접근성/국제화 | ~~3~~ 0 | ~~4~~ 2 | 4 | ~~1~~ ~~4~~ 6 |
+| 접근성/국제화 | ~~3~~ 0 | ~~4~~ ~~2~~ 1 | ~~4~~ 2 | ~~1~~ ~~4~~ ~~6~~ 9 |
 | 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | ~~1~~ 0 | ~~1~~ ~~2~~ ~~5~~ 6 |
 | CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ ~~1~~ 0 | ~~3~~ 0 | ~~2~~ ~~4~~ ~~5~~ ~~6~~ ~~7~~ 10 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ 11** | **~~52~~ ~~50~~ ~~48~~ ~~43~~ 38** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ ~~102~~ 107** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ ~~11~~ 10** | **~~52~~ ~~50~~ ~~48~~ ~~43~~ ~~38~~ 36** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ ~~102~~ ~~107~~ 110** |
 
 ---
 
@@ -133,12 +133,12 @@
 - ~~환경별 빌드 프로파일 (`--profile release-prod`)~~ ✅ **해결**: `Cargo.toml`에 `[profile.release-prod]` 추가 — `inherits = "release"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"`. Makefile `build-prod` 타겟 추가 (`make build-prod`)
 - ~~Code signing 팀 공유 설정~~ ✅ **해결**: `app/MacAgentWatch/Signing.xcconfig` 생성 — `CODE_SIGN_STYLE`, `DEVELOPMENT_TEAM`, `CODE_SIGN_IDENTITY` 환경변수 기반 설정. `#include? "Local.xcconfig"` 로컬 오버라이드. `scripts/setup-signing.sh` — 대화형 Team ID/Identity 입력 → `Local.xcconfig` 자동 생성. `.gitignore`에 `Local.xcconfig` 추가
 
-### 4.4 접근성/국제화
+### 4.4 접근성/국제화 — ✅ 조치 완료 (2026-02-07)
 
-- SwiftUI 동적 타입 크기 지원 (`@ScaledMetric`)
-- RTL 언어 지원 테스트
-- 접근성 힌트/값 추가 (`.accessibilityHint()`, `.accessibilityValue()`)
-- 이모지 애니메이션 비활성화 옵션 (접근성 설정 연동)
+- ~~SwiftUI 동적 타입 크기 지원 (`@ScaledMetric`)~~ ✅ **해결**: MenuBarView (menuWidth, sectionPadding, indicatorSize, cardVerticalPadding), DashboardView (cardSpacing, cardVerticalPadding, cardCornerRadius, chipHorizontalPadding, chipVerticalPadding), EventRowView (rowSpacing, indicatorWidth, iconWidth), SessionListView (rowVerticalPadding) — 전체 View 하드코딩 크기를 `@ScaledMetric`으로 교체. Dynamic Type 크기 변경 시 UI 자동 조정
+- ~~RTL 언어 지원 테스트~~ ✅ **해결**: `AccessibilityPreviews.swift` 생성 — `RTLPreviewModifier` (layoutDirection + locale 설정), RTL 프리뷰 4개 (MenuBarView, DashboardView, EventRowView, SessionListView), Dynamic Type 프리뷰 3개 (accessibility3 크기), Reduce Motion 프리뷰, High Contrast 프리뷰 2개. `#if DEBUG` 가드로 릴리스 빌드 제외
+- ~~접근성 힌트/값 추가 (`.accessibilityHint()`, `.accessibilityValue()`)~~ ✅ **해결**: MenuBarView — summarySection `.accessibilityHint`, alertRow `.accessibilityHint`. DashboardView — activityCard `.accessibilityHint`, filterChip `.accessibilityHint`, eventsList `.accessibilityHint`. EventRowView — 전체 행 `.accessibilityHint`, alert 배지 `.accessibilityValue`. SessionListView — SessionRowButton `.accessibilityValue`. Localizable.strings에 7개 새 키 추가
+- ~~이모지 애니메이션 비활성화 옵션 (접근성 설정 연동)~~ ✅ **해결**: EventRowView에 `@Environment(\.accessibilityReduceMotion)` 추가. bell.badge.fill `.symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)` — 시스템 '동작 줄이기' 설정 시 애니메이션 자동 비활성화
 
 ---
 
@@ -335,13 +335,13 @@
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/event.rs:24-32` | ~~**이모지 하드코딩**~~ | ✅ `text_label()` 메서드 추가 (`[LOW]`, `[MED]`, `[HIGH]`, `[CRIT]`) |
 | 4 | ~~🟠 Major~~ 🟢 | `cli/src/main.rs:148-174` | ~~**CLI 메시지 영어 고정**~~ | ✅ `fluent-bundle` 0.16 도입, `cli/locales/en/main.ftl` + `i18n.rs` 모듈, `t()`/`t_args()` 헬퍼로 전면 교체 |
 | 5 | 🟠 Major | `core/src/risk.rs:16` | **RiskRule reason 영어 `&'static str`** | i18n 키로 변경 |
-| 6 | 🟠 Major | `app/.../EventRowView.swift:60-77` | **접근성 힌트 누락** | `.accessibilityValue()`, `.accessibilityHint()` |
+| 6 | ~~🟠 Major~~ 🟢 | `app/.../EventRowView.swift:60-77` | ~~**접근성 힌트 누락**~~ | ✅ `.accessibilityHint()`, `.accessibilityValue()` 전면 추가. EventRowView 행 힌트, alert 배지 값, DashboardView 카드/필터/리스트 힌트, MenuBarView 요약/알림 힌트, SessionListView 값 |
 | 7 | ~~🟠 Major~~ 🟢 | `app/.../DashboardView.swift:71-96` | ~~**색상에만 의존한 정보 전달** — 색맹 대응 부족~~ | ✅ SF Symbol 아이콘+텍스트 병행, `@Environment(\.colorSchemeContrast)` 고대비 모드 지원, 강화된 fill/border opacity |
-| 8 | 🟡 Minor | `app/.../MenuBarView.swift:43-55` | **고정 폰트 크기** — 동적 타입 미지원 | `@ScaledMetric` 사용 |
+| 8 | ~~🟡 Minor~~ 🟢 | `app/.../MenuBarView.swift:43-55` | ~~**고정 폰트 크기** — 동적 타입 미지원~~ | ✅ `@ScaledMetric` 전면 적용 — MenuBarView (4개), DashboardView (5개), EventRowView (3개), SessionListView (1개) 프로퍼티 |
 | 9 | 🟡 Minor | `app/.../SessionListView.swift:26-38` | **날짜 포맷 로케일 미고려** | DateFormatter locale 명시 |
 | 10 | 🟡 Minor | `core/src/logger.rs:106-196` | **로그 프리픽스 영어 고정** | 구조화된 로그 필드 분리 |
-| 11 | 🟡 Minor | 전체 | **RTL 미지원** | `.environment(\.layoutDirection, .rightToLeft)` 테스트 |
-| 12 | 🟢 Good | `app/.../EventRowView.swift:64` | **symbolEffect 사용** | 접근성 설정 연동 권장 |
+| 11 | ~~🟡 Minor~~ 🟢 | 전체 | ~~**RTL 미지원**~~ | ✅ `AccessibilityPreviews.swift` — RTL 4개 + Dynamic Type 3개 + Reduce Motion 1개 + High Contrast 2개 프리뷰 |
+| 12 | 🟢 Good | `app/.../EventRowView.swift:64` | **symbolEffect 사용** | ✅ `isActive: !reduceMotion` 추가 — 접근성 '동작 줄이기' 설정 연동 완료 |
 
 ### 6.13 테스트 커버리지 (Test Coverage)
 

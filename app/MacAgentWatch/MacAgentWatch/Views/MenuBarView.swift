@@ -3,6 +3,10 @@ import SwiftUI
 struct MenuBarView: View {
     @Bindable var viewModel: MonitoringViewModel
     @Environment(\.openWindow) private var openWindow
+    @ScaledMetric(relativeTo: .body) private var menuWidth: CGFloat = 300
+    @ScaledMetric(relativeTo: .body) private var sectionPadding: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var indicatorSize: CGFloat = 8
+    @ScaledMetric(relativeTo: .caption) private var cardVerticalPadding: CGFloat = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -14,7 +18,7 @@ struct MenuBarView: View {
             Divider()
             actionsSection
         }
-        .frame(width: 300)
+        .frame(width: menuWidth)
     }
 
     // MARK: - Header
@@ -37,14 +41,14 @@ struct MenuBarView: View {
 
             statusBadge
         }
-        .padding(12)
+        .padding(sectionPadding)
     }
 
     private var statusBadge: some View {
         HStack(spacing: 4) {
             Circle()
                 .fill(viewModel.isMonitoring ? Color.green : Color.secondary)
-                .frame(width: 8, height: 8)
+                .frame(width: indicatorSize, height: indicatorSize)
             Text(viewModel.isMonitoring ? String(localized: "status.active") : String(localized: "status.idle"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -86,7 +90,8 @@ struct MenuBarView: View {
                 )
             }
         }
-        .padding(12)
+        .accessibilityHint(String(localized: "a11y.summary.hint"))
+        .padding(sectionPadding)
     }
 
     private func summaryCard(count: Int, label: String, color: Color) -> some View {
@@ -99,7 +104,7 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
+        .padding(.vertical, cardVerticalPadding)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         .accessibilityLabel(String(format: String(localized: "a11y.summary.card"), label, count))
     }
@@ -127,7 +132,7 @@ struct MenuBarView: View {
                 }
             }
         }
-        .padding(12)
+        .padding(sectionPadding)
     }
 
     private func alertRow(_ event: MonitoringEvent) -> some View {
@@ -153,6 +158,7 @@ struct MenuBarView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(format: String(localized: "a11y.risk.indicator"), String(describing: event.riskLevel)))
+        .accessibilityHint(String(localized: "a11y.alert.row.hint"))
     }
 
     // MARK: - Actions
@@ -180,7 +186,7 @@ struct MenuBarView: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(String(localized: "action.quit"))
         }
-        .padding(12)
+        .padding(sectionPadding)
     }
 
     // MARK: - Helpers

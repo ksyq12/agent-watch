@@ -20,6 +20,7 @@ private struct SessionRowButton: View {
     let session: SessionInfo
     let isSelected: Bool
     let onSelect: () -> Void
+    @ScaledMetric(relativeTo: .body) private var rowVerticalPadding: CGFloat = 4
 
     var body: some View {
         Button(action: onSelect) {
@@ -36,13 +37,14 @@ private struct SessionRowButton: View {
 
                 timestampView
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, rowVerticalPadding)
         }
         .buttonStyle(.plain)
         .listRowBackground(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(format: NSLocalizedString("a11y.session.row", comment: ""), session.sessionId, session.startTimeString))
         .accessibilityHint(Text("a11y.session.hint"))
+        .accessibilityValue(session.startTimeString)
     }
 
     @ViewBuilder

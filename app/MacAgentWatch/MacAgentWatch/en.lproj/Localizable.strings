@@ -64,3 +64,10 @@
 "a11y.dashboard.card" = "%@: %lld";
 "a11y.session.hint" = "Double-tap to load session";
 "a11y.events.list" = "Events list";
+"a11y.summary.hint" = "Shows event counts by severity level";
+"a11y.alert.row.hint" = "Shows alert details including risk level and timestamp";
+"a11y.event.row.hint" = "Shows event details including type, process, and risk level";
+"a11y.alert.value" = "Alert is active";
+"a11y.dashboard.card.hint" = "Displays count of events at this severity level";
+"a11y.filter.chip.hint" = "Double-tap to filter events by this risk level";
+"a11y.events.list.hint" = "Scroll to browse monitoring events";

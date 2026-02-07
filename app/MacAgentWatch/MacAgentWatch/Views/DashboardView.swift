@@ -3,6 +3,11 @@ import SwiftUI
 struct DashboardView: View {
     @Bindable var viewModel: MonitoringViewModel
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .body) private var cardSpacing: CGFloat = 12
+    @ScaledMetric(relativeTo: .body) private var cardVerticalPadding: CGFloat = 12
+    @ScaledMetric(relativeTo: .body) private var cardCornerRadius: CGFloat = 10
+    @ScaledMetric(relativeTo: .caption) private var chipHorizontalPadding: CGFloat = 10
+    @ScaledMetric(relativeTo: .caption) private var chipVerticalPadding: CGFloat = 4
 
     var body: some View {
         NavigationSplitView {
@@ -35,7 +40,7 @@ struct DashboardView: View {
     // MARK: - Activity Cards
 
     private var activityCards: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: cardSpacing) {
             activityCard(
                 title: String(localized: "summary.total.events"),
                 count: viewModel.activitySummary.totalEvents,
@@ -88,17 +93,18 @@ struct DashboardView: View {
                 .foregroundStyle(color)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, cardVerticalPadding)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                 .fill(color.opacity(fillOpacity))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                         .strokeBorder(color.opacity(borderOpacity), lineWidth: borderWidth)
                 )
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(format: NSLocalizedString("a11y.dashboard.card", comment: ""), title, count))
+        .accessibilityHint(String(localized: "a11y.dashboard.card.hint"))
     }
 
     // MARK: - Filter Bar
@@ -138,8 +144,8 @@ struct DashboardView: View {
                 Text(label)
             }
             .font(.caption.weight(isSelected ? .semibold : .regular))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, chipHorizontalPadding)
+            .padding(.vertical, chipVerticalPadding)
             .background(isSelected ? chipColor(level).opacity(0.15) : Color.clear, in: Capsule())
             .overlay(Capsule().strokeBorder(isSelected ? chipColor(level).opacity(0.3) : Color.secondary.opacity(0.2), lineWidth: 1))
         }
@@ -148,6 +154,7 @@ struct DashboardView: View {
             ? String(format: NSLocalizedString("a11y.filter.chip.selected", comment: ""), label)
             : String(format: NSLocalizedString("a11y.filter.chip", comment: ""), label))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(String(localized: "a11y.filter.chip.hint"))
     }
 
     private func chipColor(_ level: RiskLevel?) -> Color {
@@ -176,5 +183,6 @@ struct DashboardView: View {
         }
         .listStyle(.inset(alternatesRowBackgrounds: true))
         .accessibilityLabel(Text("a11y.events.list"))
+        .accessibilityHint(String(localized: "a11y.events.list.hint"))
     }
 }
