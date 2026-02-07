@@ -257,7 +257,10 @@ impl From<Config> for FfiConfig {
             },
             logging: FfiLoggingConfig {
                 enabled: config.logging.enabled,
-                log_dir: config.logging.log_dir.map(|p| p.to_string_lossy().to_string()),
+                log_dir: config
+                    .logging
+                    .log_dir
+                    .map(|p| p.to_string_lossy().to_string()),
                 retention_days: config.logging.retention_days,
             },
             monitoring: FfiMonitoringConfig {
@@ -315,7 +318,13 @@ pub fn load_config() -> Result<FfiConfig, FfiError> {
 pub fn analyze_command(command: String, args: Vec<String>) -> FfiEvent {
     let scorer = RiskScorer::new();
     let (risk_level, _reason) = scorer.score(&command, &args);
-    let event = Event::command(command, args, "agent".to_string(), std::process::id(), risk_level);
+    let event = Event::command(
+        command,
+        args,
+        "agent".to_string(),
+        std::process::id(),
+        risk_level,
+    );
     event.into()
 }
 
@@ -530,14 +539,12 @@ impl FfiMonitoringEngine {
         *state = SessionState::Stopping;
 
         if let Some(mut s) = session.take() {
-            s.logger
-                .write_session_footer(Some(0))
-                .map_err(|e| {
-                    *state = SessionState::Active;
-                    FfiError::Storage {
-                        message: format!("Failed to write session footer: {}", e),
-                    }
-                })?;
+            s.logger.write_session_footer(Some(0)).map_err(|e| {
+                *state = SessionState::Active;
+                FfiError::Storage {
+                    message: format!("Failed to write session footer: {}", e),
+                }
+            })?;
         }
 
         *state = SessionState::Idle;
@@ -801,10 +808,7 @@ mod tests {
 
     #[test]
     fn test_analyze_command_critical_risk() {
-        let event = analyze_command(
-            "rm".to_string(),
-            vec!["-rf".to_string(), "/".to_string()],
-        );
+        let event = analyze_command("rm".to_string(), vec!["-rf".to_string(), "/".to_string()]);
         assert_eq!(event.risk_level, FfiRiskLevel::Critical);
     }
 
@@ -863,7 +867,13 @@ mod tests {
 
         // Write some test events
         let events = vec![
-            Event::command("ls".to_string(), vec![], "bash".to_string(), 1, RiskLevel::Low),
+            Event::command(
+                "ls".to_string(),
+                vec![],
+                "bash".to_string(),
+                1,
+                RiskLevel::Low,
+            ),
             Event::command(
                 "curl".to_string(),
                 vec!["http://example.com".to_string()],

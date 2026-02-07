@@ -472,7 +472,9 @@ mod tests {
         };
 
         // Test trait methods
-        assert!(Detector::<NetworkConnection>::is_sensitive(&whitelist, &conn));
+        assert!(Detector::<NetworkConnection>::is_sensitive(
+            &whitelist, &conn
+        ));
         assert_eq!(
             Detector::<NetworkConnection>::risk_level(&whitelist, &conn),
             RiskLevel::High

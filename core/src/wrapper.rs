@@ -12,7 +12,7 @@ use crate::risk::RiskScorer;
 use crate::sanitize::sanitize_args;
 use crate::storage::{EventStorage, SessionLogger};
 use anyhow::{Context, Result};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -306,7 +306,12 @@ impl MonitoringOrchestrator {
 
         let handle = thread::spawn(move || {
             while let Ok(event) = net_rx.recv() {
-                if let crate::event::EventType::Network { ref host, port, ref protocol } = event.event_type {
+                if let crate::event::EventType::Network {
+                    ref host,
+                    port,
+                    ref protocol,
+                } = event.event_type
+                {
                     if let Some(ref tx) = event_tx {
                         let _ = tx.send(WrapperEvent::NetworkConnection {
                             host: host.clone(),
@@ -333,10 +338,9 @@ impl MonitoringOrchestrator {
             return None;
         }
 
-        let tracker_config = TrackerConfig::new(pid)
-            .poll_interval(Duration::from_millis(config.tracking_poll_ms));
-        let mut tracker = ProcessTracker::new(tracker_config)
-            .with_risk_scorer(risk_scorer.clone());
+        let tracker_config =
+            TrackerConfig::new(pid).poll_interval(Duration::from_millis(config.tracking_poll_ms));
+        let mut tracker = ProcessTracker::new(tracker_config).with_risk_scorer(risk_scorer.clone());
         let tracker_rx = tracker.subscribe();
         let event_tx = event_tx.clone();
         let logger = logger.clone();
@@ -346,13 +350,14 @@ impl MonitoringOrchestrator {
         let handle = thread::spawn(move || {
             while let Ok(tracker_event) = tracker_rx.recv() {
                 match tracker_event {
-                    TrackerEvent::ChildStarted { pid, ppid, name, path, risk_level } => {
-                        let event = Event::process_start(
-                            name.clone(),
-                            pid,
-                            Some(ppid),
-                            risk_level,
-                        );
+                    TrackerEvent::ChildStarted {
+                        pid,
+                        ppid,
+                        name,
+                        path,
+                        risk_level,
+                    } => {
+                        let event = Event::process_start(name.clone(), pid, Some(ppid), risk_level);
                         let _ = logger.log_stdout(&event);
 
                         if let Some(ref tx) = event_tx {
@@ -451,7 +456,10 @@ impl ProcessWrapper {
         }
 
         // Spawn the child process
-        let mut child = pair.slave.spawn_command(cmd).context("Failed to spawn command")?;
+        let mut child = pair
+            .slave
+            .spawn_command(cmd)
+            .context("Failed to spawn command")?;
 
         // Get child PID (platform-specific)
         let pid = child.process_id().unwrap_or(0);
@@ -462,14 +470,20 @@ impl ProcessWrapper {
 
         // Start all monitoring via orchestrator
         let orchestrator = MonitoringOrchestrator::start(
-            &self.config, pid, &self.risk_scorer, &self.logger, &self.event_tx,
+            &self.config,
+            pid,
+            &self.risk_scorer,
+            &self.logger,
+            &self.event_tx,
         );
 
         // Set up I/O handling
         let master = pair.master;
 
         // Create reader for master output
-        let mut reader = master.try_clone_reader().context("Failed to clone reader")?;
+        let mut reader = master
+            .try_clone_reader()
+            .context("Failed to clone reader")?;
 
         // Forward stdin to the PTY
         let writer = Arc::new(Mutex::new(
@@ -559,7 +573,9 @@ impl ProcessWrapper {
         // stdin_handle will exit when stdin closes or process exits
 
         // Emit exit event
-        self.emit_event(WrapperEvent::Exited { exit_code: Some(exit_code as i32) });
+        self.emit_event(WrapperEvent::Exited {
+            exit_code: Some(exit_code as i32),
+        });
         self.log_session_end(pid);
 
         Ok(exit_code as i32)
@@ -585,7 +601,9 @@ impl ProcessWrapper {
             .stderr(Stdio::inherit());
 
         // Score the command
-        let (risk_level, reason) = self.risk_scorer.score(&self.config.command, &self.config.args);
+        let (risk_level, reason) = self
+            .risk_scorer
+            .score(&self.config.command, &self.config.args);
 
         // Log the command with sanitized args
         let sanitized_args = sanitize_args(&self.config.args);
@@ -667,7 +685,13 @@ impl ProcessWrapper {
             &line[pos + 2..]
         } else if let Some(pos) = line.rfind("> ") {
             // Be careful with > as it's also used for redirection
-            if pos == 0 || line.chars().nth(pos - 1).map(|c| c.is_whitespace()).unwrap_or(true) {
+            if pos == 0
+                || line
+                    .chars()
+                    .nth(pos - 1)
+                    .map(|c| c.is_whitespace())
+                    .unwrap_or(true)
+            {
                 &line[pos + 2..]
             } else {
                 return None;
@@ -804,7 +828,9 @@ mod tests {
             .cwd("/tmp");
 
         let mut config = config;
-        config.env.push(("TEST_VAR".to_string(), "hello".to_string()));
+        config
+            .env
+            .push(("TEST_VAR".to_string(), "hello".to_string()));
 
         let wrapper = ProcessWrapper::new(config);
         let result = wrapper.run_simple();
@@ -814,12 +840,15 @@ mod tests {
 
     #[test]
     fn test_risk_scoring_integration() {
-        let config = WrapperConfig::new("rm").args(vec!["-rf".to_string(), "/tmp/test".to_string()]);
+        let config =
+            WrapperConfig::new("rm").args(vec!["-rf".to_string(), "/tmp/test".to_string()]);
 
         let wrapper = ProcessWrapper::new(config);
 
         // The wrapper should score this as high risk
-        let (level, _) = wrapper.risk_scorer.score("rm", &["-rf".to_string(), "/tmp/test".to_string()]);
+        let (level, _) = wrapper
+            .risk_scorer
+            .score("rm", &["-rf".to_string(), "/tmp/test".to_string()]);
         assert_eq!(level, RiskLevel::High);
     }
 }

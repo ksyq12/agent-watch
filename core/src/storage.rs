@@ -218,10 +218,7 @@ mod tests {
         let logger = SessionLogger::new(&log_dir, Some("test-session-123".to_string())).unwrap();
 
         assert_eq!(logger.session_id(), "test-session-123");
-        assert!(logger
-            .path()
-            .to_string_lossy()
-            .contains("test-session-123"));
+        assert!(logger.path().to_string_lossy().contains("test-session-123"));
     }
 
     #[test]
@@ -345,7 +342,13 @@ mod tests {
         let mut logger = SessionLogger::new(&log_dir, Some("json-test".to_string())).unwrap();
 
         let events = vec![
-            Event::command("ls".to_string(), vec![], "bash".to_string(), 1, RiskLevel::Low),
+            Event::command(
+                "ls".to_string(),
+                vec![],
+                "bash".to_string(),
+                1,
+                RiskLevel::Low,
+            ),
             Event::command(
                 "rm".to_string(),
                 vec!["-rf".to_string()],

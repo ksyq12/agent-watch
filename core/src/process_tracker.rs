@@ -6,8 +6,8 @@
 use crate::event::RiskLevel;
 use crate::risk::RiskScorer;
 use std::collections::HashMap;
-use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -15,9 +15,9 @@ use std::time::{Duration, Instant};
 #[cfg(target_os = "macos")]
 use libproc::bsd_info::BSDInfo;
 #[cfg(target_os = "macos")]
-use libproc::processes::{pids_by_type, ProcFilter};
-#[cfg(target_os = "macos")]
 use libproc::proc_pid::{pidinfo, pidpath};
+#[cfg(target_os = "macos")]
+use libproc::processes::{ProcFilter, pids_by_type};
 
 /// Information about a tracked process
 #[derive(Debug, Clone)]
@@ -318,7 +318,9 @@ impl ProcessTracker {
         let info = pidinfo::<BSDInfo>(pid as i32, 0).ok()?;
 
         // Convert i8 array to string (pbi_name is [i8; 32])
-        let name_bytes: Vec<u8> = info.pbi_name.iter()
+        let name_bytes: Vec<u8> = info
+            .pbi_name
+            .iter()
             .take_while(|&&c| c != 0)
             .map(|&c| c as u8)
             .collect();
@@ -394,8 +396,8 @@ mod tests {
 
     #[test]
     fn test_tracker_start_stop() {
-        let config = TrackerConfig::new(std::process::id())
-            .poll_interval(Duration::from_millis(10));
+        let config =
+            TrackerConfig::new(std::process::id()).poll_interval(Duration::from_millis(10));
         let mut tracker = ProcessTracker::new(config);
 
         tracker.start();
@@ -477,8 +479,8 @@ mod tests {
         let child_pid = child.id();
 
         // Create tracker for current process
-        let config = TrackerConfig::new(std::process::id())
-            .poll_interval(Duration::from_millis(10));
+        let config =
+            TrackerConfig::new(std::process::id()).poll_interval(Duration::from_millis(10));
         let mut tracker = ProcessTracker::new(config);
         let rx = tracker.subscribe();
 

@@ -7,9 +7,9 @@ use crate::detector::{Detector, SensitiveFileDetector};
 use crate::event::{Event, EventType, FileAction, RiskLevel};
 use anyhow::Result;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -67,7 +67,11 @@ pub struct FsEvent {
 impl FsEvent {
     /// Create a new file system event
     pub fn new(path: PathBuf, action: FileAction, flags: u32) -> Self {
-        Self { path, action, flags }
+        Self {
+            path,
+            action,
+            flags,
+        }
     }
 }
 

@@ -228,7 +228,12 @@ impl Event {
     }
 
     /// Create a process start event
-    pub fn process_start(process: String, pid: u32, ppid: Option<u32>, risk_level: RiskLevel) -> Self {
+    pub fn process_start(
+        process: String,
+        pid: u32,
+        ppid: Option<u32>,
+        risk_level: RiskLevel,
+    ) -> Self {
         Self::new(
             EventType::Process {
                 pid,

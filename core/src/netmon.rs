@@ -7,8 +7,8 @@ use crate::detector::{Detector, NetworkConnection, NetworkWhitelist};
 use crate::event::{Event, EventType};
 use anyhow::Result;
 use std::collections::HashSet;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -275,7 +275,8 @@ impl NetworkMonitor {
             }
 
             // Get current PIDs to check
-            let pids: Vec<u32> = tracked_pids.lock()
+            let pids: Vec<u32> = tracked_pids
+                .lock()
                 .map(|g| g.iter().cloned().collect())
                 .unwrap_or_default();
 
@@ -324,7 +325,7 @@ impl NetworkMonitor {
     /// Get network connections for a specific PID using libproc
     #[cfg(target_os = "macos")]
     fn get_connections_for_pid(pid: u32, config: &NetMonConfig) -> Vec<TrackedConnection> {
-        use libproc::libproc::file_info::{pidfdinfo, ListFDs, ProcFDType};
+        use libproc::libproc::file_info::{ListFDs, ProcFDType, pidfdinfo};
         use libproc::libproc::net_info::{SocketFDInfo, SocketInfoKind, TcpSIState};
         use libproc::libproc::proc_pid::listpidinfo;
 
@@ -357,7 +358,10 @@ impl NetworkMonitor {
                     let state: TcpSIState = tcp.tcpsi_state.into();
 
                     // Only track established connections (not listening sockets)
-                    if !matches!(state, TcpSIState::Established | TcpSIState::SynSent | TcpSIState::SynReceived) {
+                    if !matches!(
+                        state,
+                        TcpSIState::Established | TcpSIState::SynSent | TcpSIState::SynReceived
+                    ) {
                         continue;
                     }
 
@@ -635,8 +639,12 @@ mod tests {
         let config = NetMonConfig::default();
         let monitor = NetworkMonitor::new(config);
 
-        let conn =
-            TrackedConnection::new(1234, "api.anthropic.com".to_string(), 443, "tcp".to_string());
+        let conn = TrackedConnection::new(
+            1234,
+            "api.anthropic.com".to_string(),
+            443,
+            "tcp".to_string(),
+        );
 
         let event = monitor.create_event(&conn);
         assert_eq!(event.risk_level, RiskLevel::Medium);
@@ -647,8 +655,12 @@ mod tests {
         let config = NetMonConfig::default();
         let monitor = NetworkMonitor::new(config);
 
-        let conn =
-            TrackedConnection::new(1234, "unknown-server.xyz".to_string(), 8080, "tcp".to_string());
+        let conn = TrackedConnection::new(
+            1234,
+            "unknown-server.xyz".to_string(),
+            8080,
+            "tcp".to_string(),
+        );
 
         let event = monitor.create_event(&conn);
         assert_eq!(event.risk_level, RiskLevel::High);

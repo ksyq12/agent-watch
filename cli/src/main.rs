@@ -173,7 +173,12 @@ fn print_usage() {
     println!("Run 'macagentwatch --help' for more options.");
 }
 
-fn analyze_command(command: &str, args: &[String], format: OutputFormat, no_color: bool) -> Result<()> {
+fn analyze_command(
+    command: &str,
+    args: &[String],
+    format: OutputFormat,
+    no_color: bool,
+) -> Result<()> {
     let scorer = RiskScorer::new();
     let (level, reason) = scorer.score(command, args);
 
@@ -258,12 +263,7 @@ fn analyze_command(command: &str, args: &[String], format: OutputFormat, no_colo
                 RiskLevel::High => "HIGH",
                 RiskLevel::Critical => "CRIT",
             };
-            println!(
-                "[{}] {} {}",
-                level_str,
-                full_cmd,
-                reason.unwrap_or("")
-            );
+            println!("[{}] {} {}", level_str, full_cmd, reason.unwrap_or(""));
         }
     }
 
@@ -296,15 +296,13 @@ fn run_wrapper(cli: Cli) -> Result<()> {
     }
 
     // Determine log directory
-    let log_dir = cli.log_dir.or_else(|| {
-        dirs::data_local_dir().map(|d| d.join("macagentwatch").join("logs"))
-    });
+    let log_dir = cli
+        .log_dir
+        .or_else(|| dirs::data_local_dir().map(|d| d.join("macagentwatch").join("logs")));
 
     // Build network whitelist
-    let network_whitelist = NetworkWhitelist::new(
-        app_config.monitoring.network_whitelist.clone(),
-        vec![],
-    );
+    let network_whitelist =
+        NetworkWhitelist::new(app_config.monitoring.network_whitelist.clone(), vec![]);
 
     // Build wrapper config
     let mut config = WrapperConfig::new(command)

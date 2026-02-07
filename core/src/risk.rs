@@ -120,13 +120,16 @@ impl RiskScorer {
             RiskPattern::Command(cmd) => command == *cmd,
             RiskPattern::CommandWithArgs(cmd, required_args) => {
                 command == *cmd
-                    && required_args
-                        .iter()
-                        .all(|required| args.iter().any(|a| a == *required || a.starts_with(&format!("{}=", required))))
+                    && required_args.iter().all(|required| {
+                        args.iter()
+                            .any(|a| a == *required || a.starts_with(&format!("{}=", required)))
+                    })
             }
             RiskPattern::Contains(pattern) => full_command.contains(pattern),
             RiskPattern::PipePattern(first, second) => {
-                full_command.contains(first) && full_command.contains("|") && full_command.contains(second)
+                full_command.contains(first)
+                    && full_command.contains("|")
+                    && full_command.contains(second)
             }
         }
     }
@@ -377,10 +380,7 @@ mod tests {
     #[test]
     fn test_custom_high_risk() {
         let mut scorer = RiskScorer::new();
-        scorer.add_custom_high_risk(vec![
-            "docker rm".to_string(),
-            "kubectl delete".to_string(),
-        ]);
+        scorer.add_custom_high_risk(vec!["docker rm".to_string(), "kubectl delete".to_string()]);
 
         let (level, reason) = scorer.score("docker", &["rm".to_string(), "container".to_string()]);
         assert_eq!(level, RiskLevel::High);

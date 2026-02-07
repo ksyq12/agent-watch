@@ -91,7 +91,10 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 
         // Check for flags that indicate next arg is sensitive (case-insensitive)
         let arg_lower = arg.to_lowercase();
-        if SENSITIVE_FLAGS.iter().any(|f| f.to_lowercase() == arg_lower) {
+        if SENSITIVE_FLAGS
+            .iter()
+            .any(|f| f.to_lowercase() == arg_lower)
+        {
             result.push(arg.clone());
             mask_next = true;
             continue;
@@ -175,8 +178,11 @@ fn mask_token_patterns(arg: &str) -> Option<String> {
     }
 
     // GitHub token: ghp_... or gho_... or ghs_... or ghr_...
-    if arg.starts_with("ghp_") || arg.starts_with("gho_")
-        || arg.starts_with("ghs_") || arg.starts_with("ghr_") {
+    if arg.starts_with("ghp_")
+        || arg.starts_with("gho_")
+        || arg.starts_with("ghs_")
+        || arg.starts_with("ghr_")
+    {
         let prefix = &arg[..4];
         return Some(format!("{}{}", prefix, MASK));
     }
@@ -250,13 +256,17 @@ fn mask_url_credentials(arg: &str) -> Option<String> {
 /// Handles basic quoting (single and double quotes).
 pub fn sanitize_command_string(command: &str) -> Cow<'_, str> {
     // Check for common patterns that need sanitization
-    let needs_sanitization = SENSITIVE_FLAGS.iter().any(|f| command.to_lowercase().contains(&f.to_lowercase()))
+    let needs_sanitization = SENSITIVE_FLAGS
+        .iter()
+        .any(|f| command.to_lowercase().contains(&f.to_lowercase()))
         || command.contains("sk-ant-")
         || command.contains("sk-")
         || command.contains("ghp_")
         || command.contains("Bearer ")
         || command.contains("://")
-        || SENSITIVE_ENV_PREFIXES.iter().any(|p| command.to_lowercase().contains(&p.to_lowercase()));
+        || SENSITIVE_ENV_PREFIXES
+            .iter()
+            .any(|p| command.to_lowercase().contains(&p.to_lowercase()));
 
     if !needs_sanitization {
         return Cow::Borrowed(command);
@@ -365,7 +375,10 @@ mod tests {
 
     #[test]
     fn test_bearer_token() {
-        let args = vec!["Bearer".to_string(), "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9".to_string()];
+        let args = vec![
+            "Bearer".to_string(),
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9".to_string(),
+        ];
         let result = sanitize_args(&args);
         // Bearer is not a sensitive flag, but the next token might be masked by token patterns
         assert_eq!(result[0], "Bearer");
@@ -387,7 +400,8 @@ mod tests {
 
     #[test]
     fn test_aws_secret() {
-        let args = vec!["AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()];
+        let args =
+            vec!["AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()];
         let result = sanitize_args(&args);
         assert_eq!(result, vec!["AWS_SECRET_ACCESS_KEY=***"]);
     }
