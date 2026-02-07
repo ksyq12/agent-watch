@@ -6,7 +6,6 @@ struct LiveLogView: View {
     @State private var isLive = true
     @State private var autoScroll = true
     @State private var timer: Timer?
-    @State private var mockIndex = 0
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -84,14 +83,30 @@ struct LiveLogView: View {
     private var logContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(logEntries) { entry in
-                        logLine(entry)
-                            .id(entry.id)
+                if logEntries.isEmpty && viewModel.selectedSession == nil {
+                    VStack(spacing: 8) {
+                        Image(systemName: "text.justify.leading")
+                            .font(.largeTitle)
+                            .foregroundStyle(.tertiary)
+                        Text(String(localized: "livelog.empty.title"))
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        Text(String(localized: "livelog.empty.subtitle"))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 60)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(logEntries) { entry in
+                            logLine(entry)
+                                .id(entry.id)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
             }
             .background(Color(nsColor: .textBackgroundColor))
             .onChange(of: logEntries.count) {
@@ -147,7 +162,6 @@ struct LiveLogView: View {
 
     private func clearLog() {
         logEntries.removeAll()
-        mockIndex = 0
     }
 
     private func startPolling() {
@@ -167,18 +181,19 @@ struct LiveLogView: View {
     private func pollNewEvents() {
         guard isLive else { return }
 
-        // Mock data polling - simulates 0-2 new events per tick
-        let count = Int.random(in: 0...2)
-        for _ in 0..<count {
-            let entry = Self.mockEvents[mockIndex % Self.mockEvents.count]
-            let newEntry = LiveLogEntry(
-                timestamp: Date(),
-                process: entry.process,
-                message: entry.message,
-                riskLevel: entry.riskLevel
+        let previousCount = viewModel.events.count
+        viewModel.pollLatestEvents()
+
+        // Convert new events to log entries
+        let newEvents = viewModel.events.suffix(max(0, viewModel.events.count - previousCount))
+        for event in newEvents {
+            let entry = LiveLogEntry(
+                timestamp: event.timestamp,
+                process: event.process,
+                message: event.eventType.description,
+                riskLevel: event.riskLevel
             )
-            logEntries.append(newEntry)
-            mockIndex += 1
+            logEntries.append(entry)
         }
 
         // FIFO trim
@@ -196,25 +211,6 @@ struct LiveLogView: View {
         return AppColors.riskColor(level)
     }
 
-    // MARK: - Mock Data
-
-    private static let mockEvents: [MockLogEvent] = [
-        MockLogEvent(process: "ls", message: "src/main.rs", riskLevel: .low),
-        MockLogEvent(process: "git", message: "status", riskLevel: .low),
-        MockLogEvent(process: "cargo", message: "build --release", riskLevel: .low),
-        MockLogEvent(process: "cat", message: "/etc/hosts", riskLevel: .low),
-        MockLogEvent(process: "node", message: "server.js", riskLevel: .low),
-        MockLogEvent(process: "python", message: "train.py --epochs 50", riskLevel: .low),
-        MockLogEvent(process: "curl", message: "api.example.com/v1/data", riskLevel: .medium),
-        MockLogEvent(process: "npm", message: "install express", riskLevel: .medium),
-        MockLogEvent(process: "wget", message: "https://cdn.example.com/pkg.tar.gz", riskLevel: .medium),
-        MockLogEvent(process: "ssh", message: "user@192.168.1.100", riskLevel: .medium),
-        MockLogEvent(process: "docker", message: "run --privileged ubuntu", riskLevel: .high),
-        MockLogEvent(process: "chmod", message: "777 /var/www", riskLevel: .high),
-        MockLogEvent(process: "sudo", message: "apt-get install nmap", riskLevel: .high),
-        MockLogEvent(process: "rm", message: "-rf ./cache", riskLevel: .critical),
-        MockLogEvent(process: "dd", message: "if=/dev/zero of=/dev/sda", riskLevel: .critical),
-    ]
 }
 
 // MARK: - Supporting Types
@@ -235,12 +231,6 @@ struct LiveLogEntry: Identifiable {
         f.dateFormat = "HH:mm:ss"
         return f
     }()
-}
-
-private struct MockLogEvent {
-    let process: String
-    let message: String
-    let riskLevel: RiskLevel
 }
 
 private struct ScrollAutoScrollModifier: ViewModifier {

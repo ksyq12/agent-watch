@@ -159,12 +159,12 @@ final class MonitoringViewModel {
         loadChartData()
     }
 
-    func loadChartData() {
+    func loadChartData(bucketMinutes: UInt32 = 60) {
         guard let session = selectedSession else {
             chartData = []
             return
         }
-        chartData = bridge.getChartData(path: session.filePath)
+        chartData = bridge.getChartData(path: session.filePath, bucketMinutes: bucketMinutes)
     }
 
     func pollLatestEvents() {

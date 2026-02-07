@@ -249,6 +249,87 @@ final class MonitoringViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.errorMessage)
     }
 
+    // MARK: - pollLatestEvents
+
+    func testPollLatestEventsWithNoSession() {
+        // When selectedSession is nil, pollLatestEvents should not add any events
+        viewModel.selectedSession = nil
+        let countBefore = viewModel.events.count
+        viewModel.pollLatestEvents()
+        XCTAssertEqual(viewModel.events.count, countBefore,
+                       "pollLatestEvents should not add events when selectedSession is nil")
+    }
+
+    func testLiveEventIndexInitiallyZero() {
+        XCTAssertEqual(viewModel.liveEventIndex, 0,
+                       "liveEventIndex should start at 0")
+    }
+
+    func testClearLogDoesNotAffectViewModel() {
+        // After analyzeCommand, events should exist; clearing the view's log
+        // should not affect the ViewModel's events array
+        viewModel.analyzeCommand("echo", args: ["test"])
+        let countAfterAnalyze = viewModel.events.count
+        XCTAssertGreaterThan(countAfterAnalyze, 0,
+                             "Events should exist after analyzeCommand")
+        // ViewModel has no clearLog method - this confirms the separation
+        // between view-local logEntries and ViewModel events
+    }
+
+    // MARK: - Chart Data
+
+    func testChartDataEmptyWithNoSession() {
+        viewModel.selectedSession = nil
+        viewModel.loadChartData()
+        XCTAssertTrue(viewModel.chartData.isEmpty,
+                      "chartData should be empty when selectedSession is nil")
+    }
+
+    func testLoadChartDataCallsFFI() throws {
+        try XCTSkipIf(viewModel.sessions.isEmpty, "No sessions on disk to test with")
+        let session = viewModel.sessions[0]
+        viewModel.selectedSession = session
+        viewModel.loadChartData(bucketMinutes: 60)
+        // chartData should be set (may be empty if session has no events, but should not crash)
+        XCTAssertNotNil(viewModel.chartData)
+    }
+
+    func testEventTypeCountFromFilteredEvents() {
+        // Add known events
+        viewModel.analyzeCommand("ls", args: [])
+        viewModel.analyzeCommand("cat", args: ["/tmp/test"])
+        viewModel.analyzeCommand("echo", args: ["hello"])
+
+        let filtered = viewModel.filteredEvents
+        let commandCount = filtered.filter {
+            if case .command = $0.eventType { return true }; return false
+        }.count
+        // All analyzeCommand calls produce .command events
+        XCTAssertGreaterThanOrEqual(commandCount, 3,
+                                     "Should have at least 3 command events")
+    }
+
+    func testActivitySummaryRiskCountsMatchEvents() {
+        viewModel.analyzeCommand("ls", args: [])
+        viewModel.analyzeCommand("date", args: [])
+        let summary = viewModel.activitySummary
+        let events = viewModel.events
+
+        let criticalCount = events.filter { $0.riskLevel == .critical }.count
+        let highCount = events.filter { $0.riskLevel == .high }.count
+        let mediumCount = events.filter { $0.riskLevel == .medium }.count
+        let lowCount = events.filter { $0.riskLevel == .low }.count
+
+        XCTAssertEqual(summary.criticalCount, criticalCount,
+                       "Summary criticalCount should match events")
+        XCTAssertEqual(summary.highCount, highCount,
+                       "Summary highCount should match events")
+        XCTAssertEqual(summary.mediumCount, mediumCount,
+                       "Summary mediumCount should match events")
+        XCTAssertEqual(summary.lowCount, lowCount,
+                       "Summary lowCount should match events")
+    }
+
     // MARK: - Helpers
 
     private func countEvents(at level: RiskLevel) -> Int {

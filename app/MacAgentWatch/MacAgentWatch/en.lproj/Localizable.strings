@@ -112,9 +112,12 @@
 "livelog.pause" = "Pause";
 "livelog.resume" = "Resume";
 "livelog.clear" = "Clear";
+"livelog.line.count" = "%lld lines";
 "a11y.livelog.status.live" = "Live log is streaming";
 "a11y.livelog.toggle.hint" = "Double-tap to toggle live streaming";
 "a11y.livelog.clear.hint" = "Double-tap to clear all log entries";
+"livelog.empty.title" = "No Live Events";
+"livelog.empty.subtitle" = "Select a session or start monitoring to see live events.";
 
 // MARK: - Charts View
 "charts.period" = "Period";
@@ -128,6 +131,12 @@
 "charts.axis.time" = "Time";
 "charts.axis.count" = "Count";
 "charts.axis.type" = "Type";
+"charts.empty.timeline.title" = "No Timeline Data";
+"charts.empty.timeline.description" = "Select a session to view activity over time.";
+"charts.empty.risk.title" = "No Risk Data";
+"charts.empty.risk.description" = "No events recorded yet.";
+"charts.empty.events.title" = "No Events";
+"charts.empty.events.description" = "No events recorded yet.";
 "a11y.charts.period.picker" = "Select time period for charts";
 "a11y.charts.activity.timeline" = "Activity timeline chart showing events over time by risk level";
 "a11y.charts.risk.distribution" = "Donut chart showing distribution of events by risk level";

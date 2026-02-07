@@ -18,6 +18,12 @@ struct ChartsView: View {
             }
             .padding()
         }
+        .onChange(of: selectedPeriod) {
+            loadChartDataForPeriod()
+        }
+        .onAppear {
+            loadChartDataForPeriod()
+        }
     }
 
     // MARK: - Period Picker
@@ -40,34 +46,43 @@ struct ChartsView: View {
             Label(String(localized: "charts.activity.title"), systemImage: "chart.bar.xaxis")
                 .font(.headline)
 
-            Chart(timelineData) { point in
-                BarMark(
-                    x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
-                    y: .value(String(localized: "charts.axis.count"), point.critical)
-                )
-                .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.critical")))
+            if timelineData.isEmpty {
+                ContentUnavailableView {
+                    Label(String(localized: "charts.empty.timeline.title"), systemImage: "chart.bar.xaxis")
+                } description: {
+                    Text(String(localized: "charts.empty.timeline.description"))
+                }
+                .frame(height: 220)
+            } else {
+                Chart(timelineData) { point in
+                    BarMark(
+                        x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
+                        y: .value(String(localized: "charts.axis.count"), point.critical)
+                    )
+                    .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.critical")))
 
-                BarMark(
-                    x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
-                    y: .value(String(localized: "charts.axis.count"), point.high)
-                )
-                .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.high")))
+                    BarMark(
+                        x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
+                        y: .value(String(localized: "charts.axis.count"), point.high)
+                    )
+                    .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.high")))
 
-                BarMark(
-                    x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
-                    y: .value(String(localized: "charts.axis.count"), point.medium)
-                )
-                .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.medium")))
+                    BarMark(
+                        x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
+                        y: .value(String(localized: "charts.axis.count"), point.medium)
+                    )
+                    .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.medium")))
 
-                BarMark(
-                    x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
-                    y: .value(String(localized: "charts.axis.count"), point.low)
-                )
-                .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.low")))
+                    BarMark(
+                        x: .value(String(localized: "charts.axis.time"), point.timestamp, unit: timelineUnit),
+                        y: .value(String(localized: "charts.axis.count"), point.low)
+                    )
+                    .foregroundStyle(by: .value(String(localized: "charts.risk"), String(localized: "risk.low")))
+                }
+                .chartForegroundStyleScale(riskColorMapping)
+                .frame(height: 220)
+                .accessibilityLabel(String(localized: "a11y.charts.activity.timeline"))
             }
-            .chartForegroundStyleScale(riskColorMapping)
-            .frame(height: 220)
-            .accessibilityLabel(String(localized: "a11y.charts.activity.timeline"))
         }
         .padding()
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -80,18 +95,27 @@ struct ChartsView: View {
             Label(String(localized: "charts.risk.distribution"), systemImage: "chart.pie")
                 .font(.headline)
 
-            Chart(riskDistribution) { item in
-                SectorMark(
-                    angle: .value(String(localized: "charts.axis.count"), item.count),
-                    innerRadius: .ratio(0.6),
-                    angularInset: 1.5
-                )
-                .foregroundStyle(by: .value(String(localized: "charts.risk"), item.level))
-                .cornerRadius(4)
+            if riskDistribution.allSatisfy({ $0.count == 0 }) {
+                ContentUnavailableView {
+                    Label(String(localized: "charts.empty.risk.title"), systemImage: "chart.pie")
+                } description: {
+                    Text(String(localized: "charts.empty.risk.description"))
+                }
+                .frame(height: 200)
+            } else {
+                Chart(riskDistribution) { item in
+                    SectorMark(
+                        angle: .value(String(localized: "charts.axis.count"), item.count),
+                        innerRadius: .ratio(0.6),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(by: .value(String(localized: "charts.risk"), item.level))
+                    .cornerRadius(4)
+                }
+                .chartForegroundStyleScale(riskColorMapping)
+                .frame(height: 200)
+                .accessibilityLabel(String(localized: "a11y.charts.risk.distribution"))
             }
-            .chartForegroundStyleScale(riskColorMapping)
-            .frame(height: 200)
-            .accessibilityLabel(String(localized: "a11y.charts.risk.distribution"))
         }
         .padding()
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -104,21 +128,30 @@ struct ChartsView: View {
             Label(String(localized: "charts.event.types"), systemImage: "chart.bar")
                 .font(.headline)
 
-            Chart(eventTypeCounts) { item in
-                BarMark(
-                    x: .value(String(localized: "charts.axis.count"), item.count),
-                    y: .value(String(localized: "charts.axis.type"), item.type)
-                )
-                .foregroundStyle(.blue.gradient)
-                .cornerRadius(4)
-                .annotation(position: .trailing, alignment: .leading, spacing: 4) {
-                    Text(verbatim: "\(item.count)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+            if eventTypeCounts.allSatisfy({ $0.count == 0 }) {
+                ContentUnavailableView {
+                    Label(String(localized: "charts.empty.events.title"), systemImage: "chart.bar")
+                } description: {
+                    Text(String(localized: "charts.empty.events.description"))
                 }
+                .frame(height: 200)
+            } else {
+                Chart(eventTypeCounts) { item in
+                    BarMark(
+                        x: .value(String(localized: "charts.axis.count"), item.count),
+                        y: .value(String(localized: "charts.axis.type"), item.type)
+                    )
+                    .foregroundStyle(.blue.gradient)
+                    .cornerRadius(4)
+                    .annotation(position: .trailing, alignment: .leading, spacing: 4) {
+                        Text(verbatim: "\(item.count)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 200)
+                .accessibilityLabel(String(localized: "a11y.charts.event.types"))
             }
-            .frame(height: 200)
-            .accessibilityLabel(String(localized: "a11y.charts.event.types"))
         }
         .padding()
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -135,29 +168,30 @@ struct ChartsView: View {
     }
 
     private var timelineData: [ChartDataPoint] {
-        Self.generateMockTimeline(for: selectedPeriod)
+        viewModel.chartData
     }
 
     private var riskDistribution: [RiskDistributionItem] {
         let summary = viewModel.activitySummary
-        let critical = summary.criticalCount > 0 ? summary.criticalCount : 3
-        let high = summary.highCount > 0 ? summary.highCount : 12
-        let medium = summary.mediumCount > 0 ? summary.mediumCount : 28
-        let low = summary.lowCount > 0 ? summary.lowCount : 57
         return [
-            RiskDistributionItem(level: String(localized: "risk.critical"), count: critical),
-            RiskDistributionItem(level: String(localized: "risk.high"), count: high),
-            RiskDistributionItem(level: String(localized: "risk.medium"), count: medium),
-            RiskDistributionItem(level: String(localized: "risk.low"), count: low),
+            RiskDistributionItem(level: String(localized: "risk.critical"), count: summary.criticalCount),
+            RiskDistributionItem(level: String(localized: "risk.high"), count: summary.highCount),
+            RiskDistributionItem(level: String(localized: "risk.medium"), count: summary.mediumCount),
+            RiskDistributionItem(level: String(localized: "risk.low"), count: summary.lowCount),
         ]
     }
 
     private var eventTypeCounts: [EventTypeCount] {
-        [
-            EventTypeCount(type: String(localized: "eventType.command"), count: 42),
-            EventTypeCount(type: String(localized: "eventType.file"), count: 35),
-            EventTypeCount(type: String(localized: "eventType.network"), count: 18),
-            EventTypeCount(type: String(localized: "eventType.process"), count: 12),
+        let events = viewModel.filteredEvents
+        let commandCount = events.filter { if case .command = $0.eventType { return true }; return false }.count
+        let fileCount = events.filter { if case .fileAccess = $0.eventType { return true }; return false }.count
+        let networkCount = events.filter { if case .network = $0.eventType { return true }; return false }.count
+        let processCount = events.filter { if case .process = $0.eventType { return true }; return false }.count
+        return [
+            EventTypeCount(type: String(localized: "eventType.command"), count: commandCount),
+            EventTypeCount(type: String(localized: "eventType.file"), count: fileCount),
+            EventTypeCount(type: String(localized: "eventType.network"), count: networkCount),
+            EventTypeCount(type: String(localized: "eventType.process"), count: processCount),
         ]
     }
 
@@ -174,43 +208,18 @@ struct ChartsView: View {
         ]
     }
 
-    // MARK: - Mock Data Generation
+    // MARK: - Chart Data Loading
 
-    private static func generateMockTimeline(for period: ChartPeriod) -> [ChartDataPoint] {
-        let calendar = Calendar.current
-        let now = Date()
-        var points: [ChartDataPoint] = []
-
-        let count: Int
-        let component: Calendar.Component
-        switch period {
-        case .day:
-            count = 24
-            component = .hour
-        case .week:
-            count = 7
-            component = .day
-        case .month:
-            count = 30
-            component = .day
+    private var bucketMinutes: UInt32 {
+        switch selectedPeriod {
+        case .day: return 60
+        case .week: return 360
+        case .month: return 1440
         }
+    }
 
-        for i in (0..<count).reversed() {
-            guard let date = calendar.date(byAdding: component, value: -i, to: now) else { continue }
-            let low = Int.random(in: 5...20)
-            let medium = Int.random(in: 2...10)
-            let high = Int.random(in: 0...4)
-            let critical = Int.random(in: 0...2)
-            points.append(ChartDataPoint(
-                timestamp: date,
-                total: low + medium + high + critical,
-                critical: critical,
-                high: high,
-                medium: medium,
-                low: low
-            ))
-        }
-        return points
+    private func loadChartDataForPeriod() {
+        viewModel.loadChartData(bucketMinutes: bucketMinutes)
     }
 }
 
