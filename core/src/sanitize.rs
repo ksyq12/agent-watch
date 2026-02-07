@@ -107,9 +107,7 @@ pub fn sanitize_args(args: &[String]) -> Vec<String> {
 
         // Check for flags that indicate next arg is sensitive (case-insensitive)
         let arg_lower = arg.to_lowercase();
-        if SENSITIVE_FLAGS_LOWER
-            .iter()
-            .any(|f| *f == arg_lower)
+        if SENSITIVE_FLAGS_LOWER.contains(&arg_lower)
         {
             result.push(arg.clone());
             mask_next = true;

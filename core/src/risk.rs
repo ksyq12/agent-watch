@@ -67,7 +67,7 @@ impl RiskScorer {
         // Check custom high-risk first
         for custom in &self.custom_high_risk {
             if full_command.starts_with(custom) {
-                return (RiskLevel::High, Some("Custom high-risk command"));
+                return (RiskLevel::High, Some("risk-custom-high"));
             }
         }
 
@@ -140,149 +140,149 @@ impl RiskScorer {
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("rm", vec!["-rf", "/"]),
                 level: RiskLevel::Critical,
-                reason: "Recursive force delete of root directory",
+                reason: "risk-rm-rf-root",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("rm", vec!["-rf", "/*"]),
                 level: RiskLevel::Critical,
-                reason: "Recursive force delete of root contents",
+                reason: "risk-rm-rf-root-contents",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("chmod", vec!["777"]),
                 level: RiskLevel::Critical,
-                reason: "Setting world-writable permissions",
+                reason: "risk-chmod-world-writable",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("chmod", vec!["-R", "777"]),
                 level: RiskLevel::Critical,
-                reason: "Recursively setting world-writable permissions",
+                reason: "risk-chmod-recursive-world-writable",
             },
             RiskRule {
                 pattern: RiskPattern::PipePattern("curl", "bash"),
                 level: RiskLevel::Critical,
-                reason: "Piping remote script to shell (curl | bash)",
+                reason: "risk-curl-to-bash",
             },
             RiskRule {
                 pattern: RiskPattern::PipePattern("wget", "bash"),
                 level: RiskLevel::Critical,
-                reason: "Piping remote script to shell (wget | bash)",
+                reason: "risk-wget-to-bash",
             },
             RiskRule {
                 pattern: RiskPattern::PipePattern("curl", "sh"),
                 level: RiskLevel::Critical,
-                reason: "Piping remote script to shell (curl | sh)",
+                reason: "risk-curl-to-sh",
             },
             RiskRule {
                 pattern: RiskPattern::Contains(":(){:|:&};:"),
                 level: RiskLevel::Critical,
-                reason: "Fork bomb detected",
+                reason: "risk-fork-bomb",
             },
             // High: Destructive or privilege escalation
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("rm", vec!["-rf"]),
                 level: RiskLevel::High,
-                reason: "Recursive force delete",
+                reason: "risk-rm-rf",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("rm", vec!["-r"]),
                 level: RiskLevel::High,
-                reason: "Recursive delete",
+                reason: "risk-rm-recursive",
             },
             RiskRule {
                 pattern: RiskPattern::Command("sudo"),
                 level: RiskLevel::High,
-                reason: "Privilege escalation",
+                reason: "risk-sudo",
             },
             RiskRule {
                 pattern: RiskPattern::Command("su"),
                 level: RiskLevel::High,
-                reason: "User switch",
+                reason: "risk-su",
             },
             RiskRule {
                 pattern: RiskPattern::Command("ssh"),
                 level: RiskLevel::High,
-                reason: "Remote shell access",
+                reason: "risk-ssh",
             },
             RiskRule {
                 pattern: RiskPattern::Command("scp"),
                 level: RiskLevel::High,
-                reason: "Remote file copy",
+                reason: "risk-scp",
             },
             RiskRule {
                 pattern: RiskPattern::Command("rsync"),
                 level: RiskLevel::High,
-                reason: "Remote sync",
+                reason: "risk-rsync",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("chmod", vec!["+x"]),
                 level: RiskLevel::High,
-                reason: "Adding execute permission",
+                reason: "risk-chmod-exec",
             },
             RiskRule {
                 pattern: RiskPattern::Command("chown"),
                 level: RiskLevel::High,
-                reason: "Changing file ownership",
+                reason: "risk-chown",
             },
             RiskRule {
                 pattern: RiskPattern::Command("mkfs"),
                 level: RiskLevel::High,
-                reason: "Formatting filesystem",
+                reason: "risk-mkfs",
             },
             RiskRule {
                 pattern: RiskPattern::Command("dd"),
                 level: RiskLevel::High,
-                reason: "Low-level disk operation",
+                reason: "risk-dd",
             },
             // Medium: Network operations, package management
             RiskRule {
                 pattern: RiskPattern::Command("curl"),
                 level: RiskLevel::Medium,
-                reason: "Network request",
+                reason: "risk-curl",
             },
             RiskRule {
                 pattern: RiskPattern::Command("wget"),
                 level: RiskLevel::Medium,
-                reason: "Network download",
+                reason: "risk-wget",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("pip", vec!["install"]),
                 level: RiskLevel::Medium,
-                reason: "Python package installation",
+                reason: "risk-pip-install",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("pip3", vec!["install"]),
                 level: RiskLevel::Medium,
-                reason: "Python package installation",
+                reason: "risk-pip-install",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("npm", vec!["install"]),
                 level: RiskLevel::Medium,
-                reason: "NPM package installation",
+                reason: "risk-npm-install",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("yarn", vec!["add"]),
                 level: RiskLevel::Medium,
-                reason: "Yarn package installation",
+                reason: "risk-yarn-add",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("brew", vec!["install"]),
                 level: RiskLevel::Medium,
-                reason: "Homebrew package installation",
+                reason: "risk-brew-install",
             },
             RiskRule {
                 pattern: RiskPattern::CommandWithArgs("cargo", vec!["install"]),
                 level: RiskLevel::Medium,
-                reason: "Cargo package installation",
+                reason: "risk-cargo-install",
             },
             RiskRule {
                 pattern: RiskPattern::Command("git"),
                 level: RiskLevel::Medium,
-                reason: "Git operation",
+                reason: "risk-git",
             },
             RiskRule {
                 pattern: RiskPattern::Command("docker"),
                 level: RiskLevel::Medium,
-                reason: "Docker operation",
+                reason: "risk-docker",
             },
         ]
     }
@@ -336,7 +336,7 @@ mod tests {
 
         let (level, reason) = scorer.score("rm", &["-rf".to_string(), "directory".to_string()]);
         assert_eq!(level, RiskLevel::High);
-        assert_eq!(reason, Some("Recursive force delete"));
+        assert_eq!(reason, Some("risk-rm-rf"));
 
         let (level, _) = scorer.score("sudo", &["apt".to_string(), "update".to_string()]);
         assert_eq!(level, RiskLevel::High);
@@ -354,7 +354,7 @@ mod tests {
 
         let (level, reason) = scorer.score("rm", &["-rf".to_string(), "/".to_string()]);
         assert_eq!(level, RiskLevel::Critical);
-        assert!(reason.unwrap().contains("root"));
+        assert!(reason.unwrap().contains("risk-rm-rf-root"));
 
         let (level, _) = scorer.score("chmod", &["777".to_string(), "/etc".to_string()]);
         assert_eq!(level, RiskLevel::Critical);
@@ -374,7 +374,7 @@ mod tests {
             ],
         );
         assert_eq!(level, RiskLevel::Critical);
-        assert!(reason.unwrap().contains("curl | bash"));
+        assert!(reason.unwrap().contains("risk-curl-to-bash"));
     }
 
     #[test]
@@ -384,7 +384,7 @@ mod tests {
 
         let (level, reason) = scorer.score("docker", &["rm".to_string(), "container".to_string()]);
         assert_eq!(level, RiskLevel::High);
-        assert_eq!(reason, Some("Custom high-risk command"));
+        assert_eq!(reason, Some("risk-custom-high"));
 
         let (level, _) = scorer.score(
             "kubectl",
@@ -398,7 +398,7 @@ mod tests {
         let scorer = RiskScorer::new();
 
         let (_, reason) = scorer.score("sudo", &["rm".to_string()]);
-        assert_eq!(reason, Some("Privilege escalation"));
+        assert_eq!(reason, Some("risk-sudo"));
 
         let (_, reason) = scorer.score("ls", &[]);
         assert!(reason.is_none());
@@ -412,6 +412,6 @@ mod tests {
         // Fork bomb pattern check - the pattern should be in args
         let (level, reason) = scorer.score("bash", &["-c".to_string(), ":(){:|:&};:".to_string()]);
         assert_eq!(level, RiskLevel::Critical);
-        assert!(reason.unwrap().contains("Fork bomb"));
+        assert!(reason.unwrap().contains("risk-fork-bomb"));
     }
 }

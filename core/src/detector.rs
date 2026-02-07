@@ -6,6 +6,12 @@ use crate::event::RiskLevel;
 use glob::Pattern;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+/// Pre-computed lowercase sensitive directory patterns for efficient matching
+static SENSITIVE_DIRS_LOWER: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    vec!["/.ssh/", "/.aws/", "/.gnupg/", "/.kube/"]
+});
 
 /// Trait for detecting sensitive items
 pub trait Detector<T>: Clone + Send {
@@ -92,14 +98,12 @@ impl SensitiveFileDetector {
             }
         }
 
-        // Check for common sensitive directories
+        // Check for common sensitive directories (using cached lowercase patterns)
         let path_lower = path_str.to_lowercase();
-        if path_lower.contains("/.ssh/")
-            || path_lower.contains("/.aws/")
-            || path_lower.contains("/.gnupg/")
-            || path_lower.contains("/.kube/")
-        {
-            return true;
+        for dir in SENSITIVE_DIRS_LOWER.iter() {
+            if path_lower.contains(dir) {
+                return true;
+            }
         }
 
         false

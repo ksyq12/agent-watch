@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Network monitor configuration
 #[derive(Debug, Clone)]
@@ -274,6 +274,8 @@ impl NetworkMonitor {
                 break;
             }
 
+            let iteration_start = Instant::now();
+
             // Get current PIDs to check
             let pids: Vec<u32> = tracked_pids
                 .lock()
@@ -318,7 +320,11 @@ impl NetworkMonitor {
                 }
             }
 
-            thread::sleep(config.poll_interval);
+            // Sleep for the remaining time in the poll interval, accounting for processing time
+            let elapsed = iteration_start.elapsed();
+            if let Some(remaining) = config.poll_interval.checked_sub(elapsed) {
+                thread::sleep(remaining);
+            }
         }
     }
 
@@ -334,7 +340,20 @@ impl NetworkMonitor {
         // Get all file descriptors for the process
         let fds = match listpidinfo::<ListFDs>(pid as i32, 256) {
             Ok(fds) => fds,
-            Err(_) => return connections,
+            Err(e) => {
+                // Check errno to distinguish error causes
+                let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+                match errno {
+                    3 /* ESRCH */ => {} // Process exited, normal
+                    1 /* EPERM */ => {
+                        eprintln!("[agent-watch] Permission denied listing FDs for pid {}: {}", pid, e);
+                    }
+                    _ => {
+                        eprintln!("[agent-watch] Failed to list FDs for pid {}: {} (errno={})", pid, e, errno);
+                    }
+                }
+                return connections;
+            }
         };
 
         // Iterate through socket file descriptors
@@ -353,9 +372,7 @@ impl NetworkMonitor {
 
             match kind {
                 SocketInfoKind::Tcp if config.track_tcp => {
-                    // SAFETY: We have verified `soi_kind` is `Tcp` above via the match arm,
-                    // so the `pri_tcp` union field is the active variant and safe to read.
-                    let tcp = unsafe { socket_info.psi.soi_proto.pri_tcp };
+                    let tcp = libproc_safe::tcp_info(&socket_info.psi);
                     let state: TcpSIState = tcp.tcpsi_state.into();
 
                     // Only track established connections (not listening sockets)
@@ -372,12 +389,11 @@ impl NetworkMonitor {
                         continue;
                     }
 
-                    let remote_addr = extract_ip_address(&tcp.tcpsi_ini, tcp.tcpsi_ini.insi_vflag);
-                    if remote_addr.is_none() {
+                    let Some(remote_addr) = extract_ip_address(&tcp.tcpsi_ini, tcp.tcpsi_ini.insi_vflag) else {
                         continue;
-                    }
+                    };
 
-                    let host = remote_addr.unwrap().to_string();
+                    let host = remote_addr.to_string();
 
                     // Skip loopback addresses
                     if host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
@@ -392,9 +408,7 @@ impl NetworkMonitor {
                     ));
                 }
                 SocketInfoKind::In if config.track_udp => {
-                    // SAFETY: We have verified `soi_kind` is `In` above via the match arm,
-                    // so the `pri_in` union field is the active variant and safe to read.
-                    let in_sock = unsafe { socket_info.psi.soi_proto.pri_in };
+                    let in_sock = libproc_safe::in_sock_info(&socket_info.psi);
 
                     // Extract remote address and port for UDP
                     let remote_port = in_sock.insi_fport as u16;
@@ -402,12 +416,11 @@ impl NetworkMonitor {
                         continue;
                     }
 
-                    let remote_addr = extract_ip_address(&in_sock, in_sock.insi_vflag);
-                    if remote_addr.is_none() {
+                    let Some(remote_addr) = extract_ip_address(&in_sock, in_sock.insi_vflag) else {
                         continue;
-                    }
+                    };
 
-                    let host = remote_addr.unwrap().to_string();
+                    let host = remote_addr.to_string();
 
                     // Skip loopback addresses
                     if host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
@@ -429,43 +442,72 @@ impl NetworkMonitor {
     }
 }
 
+/// Safe wrappers for libproc union field access.
+///
+/// The libproc crate exposes socket protocol info and address info as C unions.
+/// These helpers encapsulate the unsafe access with documented invariants.
+#[cfg(target_os = "macos")]
+mod libproc_safe {
+    use libproc::libproc::net_info::{InSockInfo, SocketInfo};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    /// Extract TCP info from a socket whose `soi_kind` is `Tcp`.
+    ///
+    /// # Safety invariant
+    /// Caller must have verified that `soi_kind` matches `SocketInfoKind::Tcp`.
+    pub fn tcp_info(
+        socket: &SocketInfo,
+    ) -> libproc::libproc::net_info::TcpSockInfo {
+        // SAFETY: Caller guarantees soi_kind is Tcp, so pri_tcp is the active variant.
+        unsafe { socket.soi_proto.pri_tcp }
+    }
+
+    /// Extract UDP/generic-IP info from a socket whose `soi_kind` is `In`.
+    ///
+    /// # Safety invariant
+    /// Caller must have verified that `soi_kind` matches `SocketInfoKind::In`.
+    pub fn in_sock_info(
+        socket: &SocketInfo,
+    ) -> InSockInfo {
+        // SAFETY: Caller guarantees soi_kind is In, so pri_in is the active variant.
+        unsafe { socket.soi_proto.pri_in }
+    }
+
+    /// Extract the remote IPv4 address from an InSockInfo whose `insi_vflag` is 1.
+    pub fn extract_ipv4(in_sock: &InSockInfo) -> Option<IpAddr> {
+        // SAFETY: vflag == 1 confirms IPv4, so ina_46.i46a_addr4 is the active variant.
+        let addr = unsafe { in_sock.insi_faddr.ina_46.i46a_addr4 };
+        let ip = Ipv4Addr::from(u32::from_be(addr.s_addr));
+        if ip.is_unspecified() {
+            None
+        } else {
+            Some(IpAddr::V4(ip))
+        }
+    }
+
+    /// Extract the remote IPv6 address from an InSockInfo whose `insi_vflag` is 2.
+    pub fn extract_ipv6(in_sock: &InSockInfo) -> Option<IpAddr> {
+        // SAFETY: vflag == 2 confirms IPv6, so ina_6 is the active variant.
+        let addr = unsafe { in_sock.insi_faddr.ina_6 };
+        let ip = Ipv6Addr::from(addr.s6_addr);
+        if ip.is_unspecified() {
+            None
+        } else {
+            Some(IpAddr::V6(ip))
+        }
+    }
+}
+
 /// Extract IP address from InSockInfo based on the vflag
 #[cfg(target_os = "macos")]
 fn extract_ip_address(
     in_sock: &libproc::libproc::net_info::InSockInfo,
     vflag: u8,
 ) -> Option<std::net::IpAddr> {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
-    // vflag: 1 = IPv4, 2 = IPv6
-    if vflag == 1 {
-        // IPv4
-        // SAFETY: `vflag == 1` confirms this is an IPv4 socket, so `ina_46.i46a_addr4`
-        // is the active union variant containing the IPv4 address.
-        let addr = unsafe { in_sock.insi_faddr.ina_46.i46a_addr4 };
-        let ip = Ipv4Addr::from(u32::from_be(addr.s_addr));
-
-        // Skip unspecified addresses
-        if ip.is_unspecified() {
-            return None;
-        }
-
-        Some(IpAddr::V4(ip))
-    } else if vflag == 2 {
-        // IPv6
-        // SAFETY: `vflag == 2` confirms this is an IPv6 socket, so `ina_6`
-        // is the active union variant containing the IPv6 address.
-        let addr = unsafe { in_sock.insi_faddr.ina_6 };
-        let ip = Ipv6Addr::from(addr.s6_addr);
-
-        // Skip unspecified addresses
-        if ip.is_unspecified() {
-            return None;
-        }
-
-        Some(IpAddr::V6(ip))
-    } else {
-        None
+    match vflag {
+        1 => libproc_safe::extract_ipv4(in_sock),
+        2 => libproc_safe::extract_ipv6(in_sock),
+        _ => None,
     }
 }
 

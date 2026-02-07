@@ -350,8 +350,19 @@ pub fn read_session_log(path: String) -> Result<Vec<FfiEvent>, FfiError> {
             continue;
         }
         // Try parsing as an Event; skip session header/footer lines
-        if let Ok(event) = serde_json::from_str::<Event>(trimmed) {
-            events.push(event.into());
+        match serde_json::from_str::<Event>(trimmed) {
+            Ok(event) => events.push(event.into()),
+            Err(e) => {
+                // Check if it's a known session metadata line (not a warning)
+                let value: Result<serde_json::Value, _> = serde_json::from_str(trimmed);
+                let is_session_meta = value
+                    .ok()
+                    .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
+                    .is_some_and(|t| t == "session_start" || t == "session_end");
+                if !is_session_meta {
+                    eprintln!("[agent-watch] Warning: skipping invalid JSONL line: {e}");
+                }
+            }
         }
     }
 
@@ -556,9 +567,12 @@ impl FfiMonitoringEngine {
     }
 
     pub fn is_active(&self) -> Result<bool, FfiError> {
-        let guard = self.state.lock().map_err(|e| FfiError::Other {
-            message: format!("FfiMonitoringEngine lock poisoned in is_active: {}", e),
-        })?;
+        // Use poison recovery for read-only access — the state is still readable
+        // even if a previous holder panicked
+        let guard = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         Ok(guard.0 == SessionState::Active)
     }
 }

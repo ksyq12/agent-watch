@@ -359,7 +359,15 @@ impl ProcessTracker {
     /// Get process information
     #[cfg(target_os = "macos")]
     fn get_process_info(pid: u32, risk_scorer: &RiskScorer) -> Option<TrackedProcess> {
-        let info = pidinfo::<BSDInfo>(pid as i32, 0).ok()?;
+        let info = match pidinfo::<BSDInfo>(pid as i32, 0) {
+            Ok(info) => info,
+            Err(e) => {
+                #[cfg(debug_assertions)]
+                eprintln!("[agent-watch] Debug: pidinfo failed for pid {}: {}", pid, e);
+                let _ = e;
+                return None;
+            }
+        };
 
         // Convert i8 array to string (pbi_name is [i8; 32])
         let name_bytes: Vec<u8> = info

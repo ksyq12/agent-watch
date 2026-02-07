@@ -23,13 +23,55 @@ pub struct Config {
 }
 
 impl Config {
+    /// Sample config content with all options commented out
+    const SAMPLE_CONFIG: &'static str = "\
+# MacAgentWatch configuration file
+# Uncomment and modify options as needed.
+
+# [general]
+# verbose = false
+# default_format = \"pretty\"   # pretty, json, compact
+
+# [logging]
+# enabled = true
+# log_dir = \"~/.macagentwatch/logs\"
+# retention_days = 30
+# storage_backend = \"jsonl\"   # jsonl, sqlite, both
+
+# [monitoring]
+# fs_enabled = false
+# net_enabled = false
+# track_children = true
+# tracking_poll_ms = 100
+# fs_debounce_ms = 100
+# net_poll_ms = 500
+# watch_paths = []
+# sensitive_patterns = [\".env\", \".env.*\", \"*.pem\", \"*.key\", \"*credential*\", \"*secret*\"]
+# network_whitelist = [\"api.anthropic.com\", \"github.com\", \"api.github.com\"]
+
+# [alerts]
+# min_level = \"high\"
+# custom_high_risk = []
+";
+
     /// Load configuration from default path (~/.macagentwatch/config.toml)
     pub fn load() -> Result<Self, CoreError> {
         let path = Self::default_path()?;
         if path.exists() {
             Self::load_from_path(&path)
         } else {
+            // Create a commented-out sample config on first run
+            Self::create_sample_config(&path);
             Ok(Self::default())
+        }
+    }
+
+    /// Create a commented-out sample config file if the parent directory exists
+    fn create_sample_config(path: &std::path::Path) {
+        if let Some(parent) = path.parent() {
+            if std::fs::create_dir_all(parent).is_ok() {
+                let _ = std::fs::write(path, Self::SAMPLE_CONFIG);
+            }
         }
     }
 

@@ -69,7 +69,7 @@ impl SessionLogger {
                 source: e,
             })?;
 
-        let writer = BufWriter::new(file);
+        let writer = BufWriter::with_capacity(65536, file);
 
         Ok(Self {
             session_id,
@@ -154,17 +154,26 @@ impl Drop for SessionLogger {
     }
 }
 
+/// Result of a log cleanup operation
+pub struct CleanupResult {
+    /// Number of files successfully removed
+    pub removed: usize,
+    /// Number of files that failed to delete
+    pub failed: usize,
+}
+
 /// Clean up old log files based on retention policy
-pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<usize, CoreError> {
+pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<CleanupResult, CoreError> {
     if retention_days == 0 {
-        return Ok(0);
+        return Ok(CleanupResult { removed: 0, failed: 0 });
     }
 
     let cutoff = Utc::now() - chrono::Duration::days(retention_days as i64);
     let mut removed = 0;
+    let mut failed = 0;
 
     if !log_dir.exists() {
-        return Ok(0);
+        return Ok(CleanupResult { removed: 0, failed: 0 });
     }
 
     for entry in std::fs::read_dir(log_dir)? {
@@ -175,15 +184,25 @@ pub fn cleanup_old_logs(log_dir: &PathBuf, retention_days: u32) -> Result<usize,
             if let Ok(metadata) = entry.metadata() {
                 if let Ok(modified) = metadata.modified() {
                     let modified: DateTime<Utc> = modified.into();
-                    if modified < cutoff && std::fs::remove_file(&path).is_ok() {
-                        removed += 1;
+                    if modified < cutoff {
+                        match std::fs::remove_file(&path) {
+                            Ok(()) => removed += 1,
+                            Err(e) => {
+                                eprintln!(
+                                    "[agent-watch] Warning: Failed to delete old log {}: {}",
+                                    path.display(),
+                                    e
+                                );
+                                failed += 1;
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    Ok(removed)
+    Ok(CleanupResult { removed, failed })
 }
 
 #[cfg(test)]
@@ -316,12 +335,14 @@ mod tests {
         }
 
         // With 0 retention, nothing should be deleted
-        let removed = cleanup_old_logs(&log_dir, 0).unwrap();
-        assert_eq!(removed, 0);
+        let result = cleanup_old_logs(&log_dir, 0).unwrap();
+        assert_eq!(result.removed, 0);
+        assert_eq!(result.failed, 0);
 
         // Files are new, so they shouldn't be deleted with retention
-        let removed = cleanup_old_logs(&log_dir, 30).unwrap();
-        assert_eq!(removed, 0);
+        let result = cleanup_old_logs(&log_dir, 30).unwrap();
+        assert_eq!(result.removed, 0);
+        assert_eq!(result.failed, 0);
     }
 
     #[test]

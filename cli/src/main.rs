@@ -234,7 +234,7 @@ fn analyze_command(
             println!("  {} {}", t("analyze-risk-label").dimmed(), level_str);
 
             if let Some(r) = reason {
-                println!("  {} {}", t("analyze-reason-label").dimmed(), r);
+                println!("  {} {}", t("analyze-reason-label").dimmed(), t(r));
             }
 
             println!();
@@ -254,7 +254,7 @@ fn analyze_command(
                 "command": command,
                 "args": args,
                 "risk_level": level.to_string(),
-                "reason": reason,
+                "reason": reason.map(t),
                 "alert": level >= RiskLevel::High,
             });
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -266,7 +266,7 @@ fn analyze_command(
                 RiskLevel::High => t("risk-high"),
                 RiskLevel::Critical => t("risk-crit-compact"),
             };
-            println!("[{}] {} {}", level_str, full_cmd, reason.unwrap_or(""));
+            println!("[{}] {} {}", level_str, full_cmd, reason.map(t).unwrap_or_default());
         }
     }
 
@@ -279,9 +279,15 @@ fn run_wrapper(cli: Cli) -> Result<()> {
 
     // Load config file if specified or use default
     let app_config = if let Some(ref path) = cli.config {
-        Config::load_from_path(path).unwrap_or_default()
+        Config::load_from_path(path).unwrap_or_else(|e| {
+            eprintln!("[agent-watch] Warning: Failed to load config from {}: {}, using defaults", path.display(), e);
+            Config::default()
+        })
     } else {
-        Config::load().unwrap_or_default()
+        Config::load().unwrap_or_else(|e| {
+            eprintln!("[agent-watch] Warning: Failed to load config: {}, using defaults", e);
+            Config::default()
+        })
     };
 
     // Build logger config

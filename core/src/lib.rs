@@ -56,7 +56,7 @@ pub use process_tracker::{ProcessTracker, TrackedProcess, TrackerConfig, Tracker
 pub use risk::{RiskPattern, RiskRule, RiskScorer};
 pub use sanitize::{sanitize_args, sanitize_command_string};
 pub use sqlite_storage::{EventQuery, SqliteStorage};
-pub use storage::{cleanup_old_logs, EventStorage, SessionLogger};
+pub use storage::{cleanup_old_logs, CleanupResult, EventStorage, SessionLogger};
 pub use types::{FileAction, MonitoringSubsystem, ProcessAction, RiskLevel, SessionAction};
 pub use wrapper::{ProcessWrapper, WrapperConfig, WrapperEvent};
 

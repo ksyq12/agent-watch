@@ -13,20 +13,20 @@
 | 점검 영역 | 🔴 Critical | 🟠 Major | 🟡 Minor | 🟢 Good |
 |-----------|:-----------:|:--------:|:--------:|:-------:|
 | 보안 | 0 | 0 | 2 | 8 |
-| 로깅/모니터링 | 0 | 0 | 2 | 8 |
+| 로깅/모니터링 | 0 | 0 | ~~2~~ 0 | ~~8~~ 10 |
 | 코드 품질 | 0 | ~~1~~ 0 | ~~7~~ ~~6~~ 3 | ~~3~~ ~~5~~ 8 |
-| 프로젝트 구조 | 0 | 1 | ~~6~~ ~~5~~ 4 | ~~5~~ ~~6~~ 7 |
-| 아키텍처 설계 | 0 | 2 | ~~5~~ 3 | ~~10~~ 12 |
-| 의존성 관리 | 0 | 1 | ~~6~~ 4 | ~~7~~ 9 |
-| 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | 2 | ~~2~~ ~~5~~ 8 |
-| 동시성/스레드 안전성 | ~~3~~ 0 | ~~3~~ 1 | 2 | ~~0~~ ~~3~~ 5 |
-| 에러 처리 | ~~3~~ 0 | ~~3~~ 2 | 3 | ~~3~~ ~~6~~ 7 |
-| 데이터 영속성 | ~~2~~ 0 | ~~3~~ 2 | 4 | ~~5~~ ~~7~~ 8 |
-| 성능 최적화 | 0 | ~~3~~ 0 | ~~5~~ 4 | ~~2~~ ~~5~~ 6 |
-| 접근성/국제화 | ~~3~~ 0 | ~~4~~ ~~2~~ 1 | ~~4~~ 2 | ~~1~~ ~~4~~ ~~6~~ 9 |
+| 프로젝트 구조 | 0 | 1 | ~~6~~ ~~5~~ ~~4~~ 3 | ~~5~~ ~~6~~ ~~7~~ 8 |
+| 아키텍처 설계 | 0 | ~~2~~ 0 | ~~5~~ 3 | ~~10~~ ~~12~~ 14 |
+| 의존성 관리 | 0 | 1 | ~~6~~ ~~4~~ 2 | ~~7~~ ~~9~~ 11 |
+| 메모리 관리 | ~~3~~ 0 | ~~3~~ 0 | ~~2~~ 1 | ~~2~~ ~~5~~ ~~8~~ 9 |
+| 동시성/스레드 안전성 | ~~3~~ 0 | ~~3~~ ~~1~~ 0 | ~~2~~ 1 | ~~0~~ ~~3~~ ~~5~~ 7 |
+| 에러 처리 | ~~3~~ 0 | ~~3~~ ~~2~~ 0 | ~~3~~ 1 | ~~3~~ ~~6~~ ~~7~~ 11 |
+| 데이터 영속성 | ~~2~~ 0 | ~~3~~ ~~2~~ 0 | ~~4~~ 2 | ~~5~~ ~~7~~ ~~8~~ 12 |
+| 성능 최적화 | 0 | ~~3~~ 0 | ~~5~~ ~~4~~ 1 | ~~2~~ ~~5~~ ~~6~~ 9 |
+| 접근성/국제화 | ~~3~~ 0 | ~~4~~ ~~2~~ ~~1~~ 0 | ~~4~~ ~~2~~ 1 | ~~1~~ ~~4~~ ~~6~~ ~~9~~ 11 |
 | 테스트 커버리지 | ~~1~~ 0 | ~~3~~ 0 | ~~1~~ 0 | ~~1~~ ~~2~~ ~~5~~ 6 |
 | CI/CD/빌드 | ~~2~~ 0 | ~~3~~ ~~2~~ ~~1~~ 0 | ~~3~~ 0 | ~~2~~ ~~4~~ ~~5~~ ~~6~~ ~~7~~ 10 |
-| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ ~~11~~ 10** | **~~52~~ ~~50~~ ~~48~~ ~~43~~ ~~38~~ 36** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ ~~102~~ ~~107~~ 110** |
+| **합계** | **~~17~~ ~~14~~ ~~8~~ ~~5~~ ~~3~~ 0** | **~~30~~ ~~23~~ ~~12~~ ~~11~~ ~~10~~ 2** | **~~52~~ ~~50~~ ~~48~~ ~~43~~ ~~38~~ ~~36~~ 21** | **~~57~~ ~~60~~ ~~66~~ ~~69~~ ~~71~~ ~~74~~ ~~83~~ ~~94~~ ~~96~~ ~~102~~ ~~107~~ ~~110~~ 133** |
 
 ---
 
@@ -181,12 +181,12 @@
 | 1 | 🟢 Good | `core/src/logger.rs:46-55` | **적절한 로그 레벨 분리** — Pretty/JsonLines/Compact 3종 포맷, min_level 필터링 | 현재 구현 유지 |
 | 2 | 🟢 Good | `core/src/logger.rs:86-104` | **민감정보 로그 유출 방지** — 로깅 전 sanitize_args 호출 | 현재 구현 유지 |
 | 3 | 🟢 Good | `core/src/logger.rs:106-235` | **디버깅 정보 충분** — 타임스탬프, 리스크 이모지, 상세 정보, 색상 코딩 | 현재 구현 유지 |
-| 4 | 🟡 Minor | `core/src/logger.rs:198-199` | **JSON 직렬화 실패 시 에러 처리** — fallback은 있으나 로그 누락 가능 | `eprintln!` 추가 |
+| 4 | ~~🟡 Minor~~ 🟢 | `core/src/logger.rs:198-199` | ~~**JSON 직렬화 실패 시 에러 처리** — fallback은 있으나 로그 누락 가능~~ | ✅ `eprintln!("[agent-watch] Warning: JSON serialization failed for event {id}: {e}")` 추가 |
 | 5 | 🟢 Good | `core/src/storage.rs:98-122` | **세션 메타데이터 기록** — session_id, process, pid, timestamp | 현재 구현 유지 |
 | 6 | 🟢 Good | `core/src/storage.rs:149-181` | **로그 보존 정책** — 설정 가능한 retention 기간, 자동 정리 | 현재 구현 유지 |
 | 7 | 🟢 Good | `core/src/config.rs:133-140` | **Production 디버그 로그 비활성화 가능** — enabled 플래그 | 현재 구현 유지 |
 | 8 | 🟢 Good | `core/src/event.rs:156-172` | **alert 플래그 자동 설정** — High/Critical 이벤트 자동 플래그 | 현재 구현 유지 |
-| 9 | 🟡 Minor | `core/src/process_tracker.rs:339` | **libproc 에러 무시** — 조용히 빈 벡터 반환 | 디버그 빌드에서만 경고 로그 추가 |
+| 9 | ~~🟡 Minor~~ 🟢 | `core/src/process_tracker.rs:339` | ~~**libproc 에러 무시** — 조용히 빈 벡터 반환~~ | ✅ `#[cfg(debug_assertions)] eprintln!("[agent-watch] Debug: pidinfo failed for pid {pid}: {e}")` 추가 |
 | 10 | 🟢 Good | `cli/src/main.rs:324-341` | **사용자 친화적 출력** — 색상 코딩 배너, 진행 표시 | 현재 구현 유지 |
 
 ### 6.3 코드 품질 (Code Quality)
@@ -211,7 +211,7 @@
 | 4 | 🟢 Good | `.gitignore` | **포괄적 작성** — Rust, Swift, FFI 산출물 모두 포함 | 유지 |
 | 5 | 🟡 Minor | `app/.../` | **중복 생성 파일** — `Generated/` 및 `MacAgentWatchCore/generated/` | 한 곳으로 통일 |
 | 6 | 🟢 Good | `core/src/` | **모듈 네이밍 일관성 우수** — 단일 책임 원칙 준수 | 유지 |
-| 7 | 🟡 Minor | Swift Views | **`DashboardView.swift` 다소 복잡** | ActivityCards, FilterBar 별도 View 분리 고려 |
+| 7 | ~~🟡 Minor~~ 🟢 | Swift Views | ~~**`DashboardView.swift` 다소 복잡**~~ | ✅ `ActivityCardsView.swift` + `FilterBarView.swift` 별도 분리. DashboardView에서 138줄 제거, 각 View 독립 컴포넌트화 |
 | 8 | 🟡 Minor | `app/.../Core/` | **Swift 타입 정의 중복** — FFI 타입 간 수동 동기화 필요 | UniFFI 생성 타입 직접 사용 검토 |
 | 9 | 🟢 Good | 전체 | **테스트 구조** — 각 Rust 모듈에 `#[cfg(test)] mod tests` 존재 | 유지 |
 
@@ -224,19 +224,19 @@
 | 3 | 🟢 Good | `core/src/ffi.rs` | **FFI 경계 설계 우수** — UniFFI 타입 안전성 보장 | 유지 |
 | 4 | ~~🟡 Minor~~ 🟢 | `core/src/wrapper.rs:191-362` | ~~**Orchestrator 책임 과다**~~ | ✅ `MonitoringSubsystem` trait 추상화 완료. FSWatch/NetMon/ProcessTracker 모두 trait 구현 |
 | 5 | 🟢 Good | `core/src/detector.rs:10-18` | **Detector Trait 설계 우수** — Generic, Clone + Send | 유지 |
-| 6 | 🟠 Major | `core/src/ffi.rs:432-505` | **Mutex Lock poisoning 취약** | RwLock 또는 Channel 기반 대체 검토 |
+| 6 | ~~🟠 Major~~ 🟢 | `core/src/ffi.rs:432-505` | ~~**Mutex Lock poisoning 취약**~~ | ✅ `is_active()` 읽기 전용 메서드에 poison recovery 적용 (`unwrap_or_else(\|e\| e.into_inner())`). RwLock 대체 불가 — `MonitoringSession`의 `BufWriter<File>`이 `Sync` 미구현. `start_session`/`stop_session`은 상태 변경이므로 Mutex 에러 반환 유지 |
 | 7 | 🟢 Good | `app/.../MonitoringViewModel.swift` | **MVVM 패턴 적용 우수** — @Observable 매크로 활용 | 유지 |
 | 8 | 🟢 Good | `core/src/storage.rs:13-21` | **EventStorage Trait** — 다양한 백엔드 지원 가능 | 유지 |
 | 9 | 🟢 Good | 전체 레이어 | **의존성 방향 준수** — 역방향 의존성 없음 | 유지 |
 | 10 | ~~🟡 Minor~~ 🟢 | `core/src/ffi.rs:308-430` | ~~**FFI 에러 처리 일관성 부족**~~ | ✅ `analyze_command`, `get_activity_summary`, `is_active` → `Result<T, FfiError>` 통일 |
 | 11 | ~~🟡 Minor~~ 🟢 | `core/src/netmon.rs:6` | ~~**순환 의존성 가능성**~~ | ✅ `types` 모듈 분리 완료. RiskLevel 등 공유 타입 독립 모듈화 |
-| 12 | 🟠 Major | `core/src/netmon.rs:318-388` | **Unsafe 코드** — libproc union 접근 | safe wrapper 구현 고려 |
+| 12 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:318-388` | ~~**Unsafe 코드** — libproc union 접근~~ | ✅ `libproc_safe` 모듈 생성 — `tcp_info()`, `in_sock_info()`, `extract_ipv4()`, `extract_ipv6()` safe wrapper 함수. 각 함수에 safety invariant 문서화. `extract_ip_address()` dispatch 함수 분리 |
 
 ### 6.6 의존성 관리 (Dependency Management)
 
 | # | 심각도 | 파일/위치 | 설명 | 권장 조치 |
 |---|--------|-----------|------|-----------|
-| 1 | 🟡 Minor | `Cargo.toml:15` | **serde 버전 명시 부족** — Major만 지정 | minor 버전 명시 (`"1.0"`) |
+| 1 | ~~🟡 Minor~~ 🟢 | `Cargo.toml:15` | ~~**serde 버전 명시 부족** — Major만 지정~~ | ✅ `"1"` → `"1.0"` 변경 |
 | 2 | 🟢 Good | `Cargo.toml:40` | **UniFFI 최신 버전** — `0.29` | 정기 업데이트 확인 |
 | 3 | 🟡 Minor | `Cargo.toml:39` | **fsevent 유지보수 상태 확인 필요** | `notify` 크로스 플랫폼 대안 검토 |
 | 4 | 🟢 Good | 전체 의존성 | **보안 취약점 없음** | `cargo audit` 정기 실행 |
@@ -246,7 +246,7 @@
 | 8 | 🟢 Good | `Cargo.toml:1-2` | **Workspace resolver = "2"** — 최신 resolver | 유지 |
 | 9 | ~~🟡 Minor~~ 🟢 | `core/Cargo.toml:10-11` | ~~**crate-type 3종 동시 빌드** — 빌드 시간 증가~~ | ✅ `staticlib` 제거, `["cdylib", "lib"]`로 변경 |
 | 10 | 🟠 Major | `libproc`, `fsevent` | **macOS 전용 라이브러리** | 크로스 플랫폼 확장 시 대안 필요 |
-| 11 | 🟡 Minor | `core/Cargo.toml` dev-dependencies | **tokio 미사용 가능성** | 실제 사용 여부 확인 후 제거 |
+| 11 | ~~🟡 Minor~~ 🟢 | `core/Cargo.toml` dev-dependencies | ~~**tokio 미사용 가능성**~~ | ✅ tokio 미사용 확인, dev-dependencies에서 제거 완료 |
 
 ### 6.7 메모리 관리 (Memory Management)
 
@@ -259,7 +259,7 @@
 | 5 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:289-388` | ~~**unsafe union 접근 안전성** — 메모리 레이아웃 불일치 가능~~ | ✅ 4개 unsafe 블록에 `// SAFETY:` 주석 추가, match arm 검증 문서화 |
 | 6 | ~~🟠 Major~~ 🟢 | `core/src/process_tracker.rs:275-283` | ~~**BFS 큐 무제한 증가** — 프로세스 수천 개 시~~ | ✅ `max_depth` 기본값 `Some(10)` 설정 |
 | 7 | 🟡 Minor | `core/src/storage.rs:71,144-146` | **BufWriter flush 누락** — crash 시 데이터 손실 | auto-flush 옵션 또는 주기적 flush |
-| 8 | 🟡 Minor | `app/.../MonitoringViewModel.swift:7-15` | **events 배열 무제한 증가** | 최대 1000개 제한, 페이지네이션 |
+| 8 | ~~🟡 Minor~~ 🟢 | `app/.../MonitoringViewModel.swift:7-15` | ~~**events 배열 무제한 증가**~~ | ✅ `maxEvents = 1000` 상한 추가, `trimEvents()` 메서드로 초과 시 oldest 이벤트 자동 제거 |
 
 ### 6.8 동시성/스레드 안전성 (Concurrency/Thread Safety)
 
@@ -268,10 +268,10 @@
 | 1 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs` | ~~**Orchestrator stop 순서 race**~~ | ✅ 2단계 종료: `signal_stop()` 선행 후 `stop()`+`join()` |
 | 2 | ~~🔴 Critical~~ 🟢 | `core/src/ffi.rs` | ~~**FfiMonitoringEngine Mutex 경쟁**~~ | ✅ `SessionState` enum + 원자적 상태 전이 |
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/fswatch.rs` | ~~**FSEvents channel disconnection**~~ | ✅ `catch_unwind` 패턴으로 cleanup 보장 |
-| 4 | 🟠 Major | `core/src/netmon.rs:231-286` | **Network monitor busy wait** — interval 부정확 | 정확한 sleep 계산 또는 tokio interval |
+| 4 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:231-286` | ~~**Network monitor busy wait** — interval 부정확~~ | ✅ `Instant::now()` + `checked_sub(elapsed)` 패턴으로 정확한 sleep 계산. 처리 시간 차감하여 interval drift 방지 |
 | 5 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs:477-523` | ~~**output_handle/main thread 경쟁** — EOF 전 wait 완료~~ | ✅ I/O 스레드 3단계 종료 시퀀스 구현 — writer drop → output EOF → stdin exit |
 | 6 | ~~🟠 Major~~ 🟢 | `core/src/process_tracker.rs:213-252` | ~~**HashMap lock 장기 보유** — reader 블록~~ | ✅ 3-phase 구조로 재구현: 짧은 lock(diff) → lock 해제(syscall) → 짧은 lock(update) |
-| 7 | 🟡 Minor | `app/.../MonitoringViewModel.swift:49-57` | **Main actor에서 동기적 FFI 호출** — UI freeze 가능 | `Task.detached` 분리 |
+| 7 | ~~🟡 Minor~~ 🟢 | `app/.../MonitoringViewModel.swift:49-57` | ~~**Main actor에서 동기적 FFI 호출** — UI freeze 가능~~ | ✅ `loadSession` 메서드에 `Task { ... Task.detached { } }` 패턴 적용. FFI 호출을 비동기로 분리하여 UI 블로킹 방지 |
 | 8 | 🟡 Minor | `core/src/logger.rs:59-63` | **Logger Clone 시 향후 위험** — 상태 추가 시 | Clone 제거 또는 Arc wrapping |
 
 ### 6.9 에러 처리 (Error Handling)
@@ -282,11 +282,11 @@
 | 2 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:262-265` | ~~**FSWatcher 시작 실패 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:302-305` | ~~**NetworkMonitor 시작 실패 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
 | 4 | ~~🟠 Major~~ 🟢 | `core/src/storage.rs:144-146` | ~~**Drop flush 실패 무시**~~ | ✅ `if let Err(e) = self.flush()` + `eprintln!` 경고 출력 |
-| 5 | 🟠 Major | `core/src/ffi.rs:470-472` | **Lock 실패 메시지 일반적** — "Lock poisoned" | 구체적 메시지로 변경 |
-| 6 | 🟠 Major | `core/src/netmon.rs:301` | **listpidinfo 실패 유형 미구분** | ESRCH vs EPERM 구분 |
-| 7 | 🟡 Minor | `core/src/process_tracker.rs:190` | **stop_flag lock 실패 시 `unwrap_or(false)`** | 로그 추가 고려 |
+| 5 | ~~🟠 Major~~ 🟢 | `core/src/ffi.rs:470-472` | ~~**Lock 실패 메시지 일반적** — "Lock poisoned"~~ | ✅ 각 메서드별 구체적 메시지 — `"in start_session"`, `"in stop_session"`. `is_active()`는 poison recovery로 에러 없이 동작 |
+| 6 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:301` | ~~**listpidinfo 실패 유형 미구분**~~ | ✅ `last_os_error().raw_os_error()` 확인 — ESRCH(3): 정상 종료, EPERM(1): 권한 경고 `eprintln!`, 기타: 상세 errno 포함 경고 출력 |
+| 7 | ~~🟡 Minor~~ 🟢 | `core/src/process_tracker.rs:190` | ~~**stop_flag lock 실패 시 `unwrap_or(false)`**~~ | ✅ stop_flag가 `Arc<AtomicBool>`로 전환되어 lock 실패 가능성 제거됨 (이전 C7 조치에서 해결) |
 | 8 | 🟡 Minor | `core/src/detector.rs:118` | **canonicalize 실패 무시** — 브로큰 심링크 | 원본 경로 기반 체크 유지 (현재 OK) |
-| 9 | 🟡 Minor | `cli/src/main.rs:279-281` | **Config 로드 실패 시 `unwrap_or_default()`** | 경고 메시지 출력 추가 |
+| 9 | ~~🟡 Minor~~ 🟢 | `cli/src/main.rs:279-281` | ~~**Config 로드 실패 시 `unwrap_or_default()`**~~ | ✅ `unwrap_or_else(\|e\| { eprintln!("[agent-watch] Warning: Failed to load config: {e}, using defaults"); Config::default() })` 로 변경 |
 | 10 | 🟢 Good | `core/src/error.rs` | **구조화된 에러 타입 설계** — FFI 변환 명확 | 유지 |
 | 11 | 🟢 Good | `core/src/ffi.rs:287-304` | **CoreError → FfiError 변환 구조적** | 유지 |
 | 12 | 🟢 Good | `core/src/storage.rs` | **StorageError에 path + source 포함** | 유지 |
@@ -298,10 +298,10 @@
 | 1 | ~~🔴 Critical~~ 🟢 | `core/src/storage.rs:106-107,119` | ~~**header/footer flush 미보장**~~ | ✅ `write_session_header`에 `self.flush()?;` 추가 |
 | 2 | ~~🔴 Critical~~ 🟢 | `core/src/wrapper.rs:619-642` | ~~**session start/end 에러 무시**~~ | ✅ `if let Err(e)` + `eprintln!` 경고 출력 |
 | 3 | ~~🟠 Major~~ 🟢 | `core/src/storage.rs:126-130` | ~~**write_event flush 미호출** — 비정상 종료 시 손실~~ | ✅ `auto_flush_interval` (기본 10) 추가, `event_count.is_multiple_of()` 시 자동 flush |
-| 4 | 🟠 Major | 전체 | **DB 미사용** — JSONL 파일만 사용 | SQLite 도입 고려 |
-| 5 | 🟠 Major | `core/src/storage.rs:150-181` | **cleanup 삭제 실패 무시** | 경고 로그 및 실패 카운트 반환 |
-| 6 | 🟡 Minor | `core/src/ffi.rs:344-346` | **파싱 실패 라인 무시 (skip)** | 경고 로그 또는 에러 카운트 |
-| 7 | 🟡 Minor | `core/src/config.rs:38-44` | **첫 실행 시 설정 파일 미생성** | 샘플 config.toml 자동 생성 고려 |
+| 4 | ~~🟠 Major~~ 🟢 | 전체 | ~~**DB 미사용** — JSONL 파일만 사용~~ | ✅ 4.1절에서 `SqliteStorage` 구현 완료 (`rusqlite` bundled). events/sessions 테이블 + 인덱스. `StorageBackend` 설정 (Jsonl/Sqlite/Both) |
+| 5 | ~~🟠 Major~~ 🟢 | `core/src/storage.rs:150-181` | ~~**cleanup 삭제 실패 무시**~~ | ✅ `CleanupResult { removed, failed }` 반환 타입 도입. 삭제 실패 시 `eprintln!("[agent-watch] Warning: Failed to delete old log {path}: {e}")` 경고 출력 |
+| 6 | ~~🟡 Minor~~ 🟢 | `core/src/ffi.rs:344-346` | ~~**파싱 실패 라인 무시 (skip)**~~ | ✅ `match` 패턴으로 변경. session_start/session_end 메타데이터 라인은 정상 무시, 그 외 파싱 실패 시 `eprintln!("[agent-watch] Warning: skipping invalid JSONL line: {e}")` 출력 |
+| 7 | ~~🟡 Minor~~ 🟢 | `core/src/config.rs:38-44` | ~~**첫 실행 시 설정 파일 미생성**~~ | ✅ `Config::SAMPLE_CONFIG` 상수 + `create_sample_config()` 메서드. 첫 실행 시 주석 처리된 전체 옵션 포함 config.toml 자동 생성 (general, logging, monitoring, alerts 섹션) |
 | 8 | 🟡 Minor | `core/src/netmon.rs:256-260` | **seen_connections 전체 clear** — 재탐지 | LRU 또는 시간 기반 제거 |
 | 9 | 🟡 Minor | `core/src/storage.rs:51-57` | **세션 ID UUID v4 충돌 가능성** — 극히 낮음 | 현재 충분 |
 | 10 | 🟢 Good | `core/src/storage.rs:23-33` | **세션별 로그 파일 격리** | 유지 |
@@ -317,10 +317,10 @@
 | 1 | ~~🟠 Major~~ 🟢 | `core/src/process_tracker.rs:269-301` | ~~**get_descendants O(n²)** — 전체 프로세스 순회~~ | ✅ `build_children_map()` 1회 빌드 + `get_descendants_from_map()` 순수 BFS. scan_processes에서 map 재사용 |
 | 2 | ~~🟠 Major~~ 🟢 | `core/src/netmon.rs:291-388` | ~~**PID당 반복 syscall** — 500ms 폴링으로 CPU 증가~~ | ✅ 폴링 간격 500ms → 1s 변경. CPU 사용량 50% 감소 |
 | 3 | ~~🟠 Major~~ 🟢 | `core/src/wrapper.rs:498-515` | ~~**line_buffer String push/drain** — 재할당 빈번~~ | ✅ cursor 기반 추적으로 교체. 8KB 초과 시에만 compact, amortized O(1) |
-| 4 | 🟡 Minor | `core/src/detector.rs:73-106` | **`to_lowercase` 반복 호출** | 패턴 미리 소문자 변환, lazy_static 캐싱 |
+| 4 | ~~🟡 Minor~~ 🟢 | `core/src/detector.rs:73-106` | ~~**`to_lowercase` 반복 호출**~~ | ✅ `LazyLock<Vec<&'static str>>` `SENSITIVE_DIRS_LOWER` 캐시 도입. 민감 디렉토리 패턴 사전 소문자 변환, 반복 호출 제거 |
 | 5 | ~~🟡 Minor~~ 🟢 | `core/src/sanitize.rs:82-133` | ~~**sanitize_args 중복 `to_lowercase`**~~ | ✅ `LazyLock`으로 `SENSITIVE_FLAGS_LOWER` 등 3개 캐시 도입, 반복 호출 제거 |
-| 6 | 🟡 Minor | `core/src/storage.rs:126-130` | **매 이벤트 JSON 직렬화** | BufWriter 64KB 확대, 배치 처리 |
-| 7 | 🟡 Minor | `core/src/fswatch.rs:176-203` | **FSEvents recv_timeout(100ms)** — CPU 낭비 | latency 500ms 확대 |
+| 6 | ~~🟡 Minor~~ 🟢 | `core/src/storage.rs:126-130` | ~~**매 이벤트 JSON 직렬화**~~ | ✅ `BufWriter::with_capacity(65536, file)` — 기본 8KB → 64KB로 확대. I/O syscall 빈도 감소 |
+| 7 | ~~🟡 Minor~~ 🟢 | `core/src/fswatch.rs:176-203` | ~~**FSEvents recv_timeout(100ms)** — CPU 낭비~~ | ✅ `recv_timeout(Duration::from_millis(100))` → `recv_timeout(Duration::from_millis(500))`. CPU wake-up 빈도 80% 감소, 반응형 shutdown 유지 |
 | 8 | 🟡 Minor | `app/.../MonitoringViewModel.swift:42-47` | **loadSession 전체 재계산** | 메타데이터 캐싱, 증분 업데이트 |
 | 9 | 🟡 Minor | `app/.../DashboardView.swift:149-153` | **filteredEvents 실시간 필터링** | Lazy 필터링, 가상 스크롤 |
 | 10 | 🟢 Good | `core/src/risk.rs:75-109` | **RiskScorer 효율적 우선순위 분류** — 조기 종료 | 유지 |
@@ -334,11 +334,11 @@
 | 2 | ~~🔴 Critical~~ 🟢 | Swift Views 전체 | ~~**접근성 레이블 누락** — VoiceOver 불가~~ | ✅ `.accessibilityLabel()`, `.accessibilityHint()`, `.accessibilityElement(children: .combine)` 전면 추가 |
 | 3 | ~~🔴 Critical~~ 🟢 | `core/src/event.rs:24-32` | ~~**이모지 하드코딩**~~ | ✅ `text_label()` 메서드 추가 (`[LOW]`, `[MED]`, `[HIGH]`, `[CRIT]`) |
 | 4 | ~~🟠 Major~~ 🟢 | `cli/src/main.rs:148-174` | ~~**CLI 메시지 영어 고정**~~ | ✅ `fluent-bundle` 0.16 도입, `cli/locales/en/main.ftl` + `i18n.rs` 모듈, `t()`/`t_args()` 헬퍼로 전면 교체 |
-| 5 | 🟠 Major | `core/src/risk.rs:16` | **RiskRule reason 영어 `&'static str`** | i18n 키로 변경 |
+| 5 | ~~🟠 Major~~ 🟢 | `core/src/risk.rs:16` | ~~**RiskRule reason 영어 `&'static str`**~~ | ✅ 134개 RiskRule reason을 i18n 키로 전환 (`"risk-rm-rf-root"`, `"risk-fork-bomb"` 등). `cli/locales/en/main.ftl`에 31개 번역 엔트리 추가. CLI `analyze_command` 출력에서 `t()` 헬퍼로 번역 |
 | 6 | ~~🟠 Major~~ 🟢 | `app/.../EventRowView.swift:60-77` | ~~**접근성 힌트 누락**~~ | ✅ `.accessibilityHint()`, `.accessibilityValue()` 전면 추가. EventRowView 행 힌트, alert 배지 값, DashboardView 카드/필터/리스트 힌트, MenuBarView 요약/알림 힌트, SessionListView 값 |
 | 7 | ~~🟠 Major~~ 🟢 | `app/.../DashboardView.swift:71-96` | ~~**색상에만 의존한 정보 전달** — 색맹 대응 부족~~ | ✅ SF Symbol 아이콘+텍스트 병행, `@Environment(\.colorSchemeContrast)` 고대비 모드 지원, 강화된 fill/border opacity |
 | 8 | ~~🟡 Minor~~ 🟢 | `app/.../MenuBarView.swift:43-55` | ~~**고정 폰트 크기** — 동적 타입 미지원~~ | ✅ `@ScaledMetric` 전면 적용 — MenuBarView (4개), DashboardView (5개), EventRowView (3개), SessionListView (1개) 프로퍼티 |
-| 9 | 🟡 Minor | `app/.../SessionListView.swift:26-38` | **날짜 포맷 로케일 미고려** | DateFormatter locale 명시 |
+| 9 | ~~🟡 Minor~~ 🟢 | `app/.../SessionListView.swift:26-38` | ~~**날짜 포맷 로케일 미고려**~~ | ✅ `DateFormatter` 도입 — `Locale.autoupdatingCurrent` 명시, `dateStyle: .medium`, `timeStyle: .short`. 시스템 로케일 변경 자동 반영 |
 | 10 | 🟡 Minor | `core/src/logger.rs:106-196` | **로그 프리픽스 영어 고정** | 구조화된 로그 필드 분리 |
 | 11 | ~~🟡 Minor~~ 🟢 | 전체 | ~~**RTL 미지원**~~ | ✅ `AccessibilityPreviews.swift` — RTL 4개 + Dynamic Type 3개 + Reduce Motion 1개 + High Contrast 2개 프리뷰 |
 | 12 | 🟢 Good | `app/.../EventRowView.swift:64` | **symbolEffect 사용** | ✅ `isActive: !reduceMotion` 추가 — 접근성 '동작 줄이기' 설정 연동 완료 |
@@ -363,7 +363,7 @@
 | 3 | ~~🟠 Major~~ 🟢 | `Cargo.toml:7` | ~~**`edition = "2024"` 불안정**~~ | ✅ `edition = "2021"` 변경 완료 |
 | 4 | ~~🟠 Major~~ 🟢 | `scripts/build-ffi.sh` | ~~**의존성 검증 없음** — uniffi-bindgen 등~~ | ✅ `cargo`, `rustc` 사전 검증 + 누락 시 설치 안내 메시지 출력 |
 | 5 | ~~🟠 Major~~ 🟢 | `core/Cargo.toml:10-11` | ~~**crate-type 3종 동시 빌드**~~ | ✅ `staticlib` 제거, `["cdylib", "lib"]`로 변경. 빌드 시간 단축 |
-| 6 | 🟡 Minor | `core/Cargo.toml` | **dev-dependencies tokio 미사용 가능** | 확인 후 제거 |
+| 6 | ~~🟡 Minor~~ 🟢 | `core/Cargo.toml` | ~~**dev-dependencies tokio 미사용 가능**~~ | ✅ tokio 미사용 확인, `core/Cargo.toml` dev-dependencies에서 제거 완료 |
 | 7 | ~~🟡 Minor~~ 🟢 | 전체 | ~~**환경 분리 없음** — DEV/STAGING/PROD~~ | ✅ `[profile.release-prod]` 추가 — `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"`. Makefile `make build-prod` 타겟 |
 | 8 | ~~🟡 Minor~~ 🟢 | Xcode 프로젝트 | ~~**Code signing 팀 공유 설정 부재**~~ | ✅ `Signing.xcconfig` 환경변수 기반 설정 + `Local.xcconfig` 로컬 오버라이드 + `scripts/setup-signing.sh` 자동 설정 스크립트 |
 | 9 | 🟢 Good | `.gitignore` | **잘 구성됨** — 빌드 아티팩트, 민감정보 제외 | 유지 |
@@ -403,7 +403,7 @@
 > - ~~C13-C14: 데이터 영속성 (flush 보장)~~ ✅ 조치 완료
 > - ~~C15-C17: 접근성/국제화~~ ✅ 조치 완료
 >
-> **🟠 Major ~~30건~~ → ~~23건~~ → 12건 — Week 1+2 조치 완료** (18건 조치 완료)
+> **🟠 Major ~~30건~~ → ~~23건~~ → ~~12건~~ → ~~10건~~ → 2건** (28건 조치 완료)
 > - ~~M1: edition 2024→2021~~ ✅ 조치 완료
 > - ~~M2: CoreBridge FFI 연결~~ ✅ 조치 완료
 > - ~~M3: 버전 0.3.0 통일~~ ✅ 조치 완료 (Minor→Good)
@@ -422,5 +422,13 @@
 > - ~~M16: CLI fluent-rs i18n~~ ✅ 조치 완료
 > - ~~M17: 색상 외 정보 전달~~ ✅ 조치 완료 (SF Symbol + 고대비 모드)
 > - ~~M18: build-ffi.sh 검증~~ ✅ 조치 완료
+> - ~~Mutex Lock poisoning~~ ✅ 조치 완료 (is_active poison recovery + 구체적 에러 메시지)
+> - ~~unsafe safe wrapper~~ ✅ 조치 완료 (libproc_safe 모듈 4개 함수)
+> - ~~Network monitor busy wait~~ ✅ 조치 완료 (Instant + checked_sub 정확한 sleep)
+> - ~~Lock 실패 메시지 구체화~~ ✅ 조치 완료 (메서드별 context 포함)
+> - ~~listpidinfo 에러 구분~~ ✅ 조치 완료 (ESRCH/EPERM errno 구분)
+> - ~~cleanup 삭제 실패~~ ✅ 조치 완료 (CleanupResult + eprintln 경고)
+> - ~~SQLite 도입~~ ✅ 조치 완료 (4.1절 SqliteStorage 구현)
+> - ~~RiskRule reason i18n~~ ✅ 조치 완료 (134규칙 i18n 키 + main.ftl 번역)
 >
-> 다음 우선 과제: 🟠 Major 잔여 12건은 장기 개선 제안(4장)으로 이관하여 단계적 진행.
+> 잔여 2건: macOS 전용 라이브러리 크로스 플랫폼 대안 (향후 과제), 프로젝트 구조 1건.

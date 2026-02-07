@@ -231,7 +231,10 @@ impl Logger {
     }
 
     fn format_json(&self, event: &Event) -> String {
-        serde_json::to_string(event).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
+        serde_json::to_string(event).unwrap_or_else(|e| {
+            eprintln!("[agent-watch] Warning: JSON serialization failed for event {}: {}", event.id, e);
+            format!("{{\"error\": \"{}\"}}", e)
+        })
     }
 
     fn format_compact(&self, event: &Event) -> String {

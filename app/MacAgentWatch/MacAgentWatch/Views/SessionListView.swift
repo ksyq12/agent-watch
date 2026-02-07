@@ -22,6 +22,14 @@ private struct SessionRowButton: View {
     let onSelect: () -> Void
     @ScaledMetric(relativeTo: .body) private var rowVerticalPadding: CGFloat = 4
 
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 4) {
@@ -50,13 +58,9 @@ private struct SessionRowButton: View {
     @ViewBuilder
     private var timestampView: some View {
         if let startTime = session.startTime {
-            HStack(spacing: 0) {
-                Text(startTime, style: .date)
-                Text(" ")
-                Text(startTime, style: .time)
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            Text(Self.dateTimeFormatter.string(from: startTime))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         } else {
             Text(session.startTimeString)
                 .font(.caption2)

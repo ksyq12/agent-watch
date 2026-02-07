@@ -176,7 +176,7 @@ impl FileSystemWatcher {
                 break;
             }
 
-            match fs_rx.recv_timeout(Duration::from_millis(100)) {
+            match fs_rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(fse) => {
                     let path = PathBuf::from(&fse.path);
                     let action = Self::flags_to_action(fse.flag);
