@@ -1,22 +1,24 @@
 # MacAgentWatch
 
 ![CI](https://github.com/ksyq12/agent-watch/actions/workflows/ci.yml/badge.svg)
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 
-A macOS-native monitoring and security tool that wraps AI coding agents (Claude Code, Cursor, Copilot, etc.) to provide real-time visibility into file system changes, network connections, and risky command execution.
+A macOS-native monitoring and security tool for AI coding agents. MacAgentWatch automatically detects running agents (Claude Code, Cursor, Copilot, Aider, Windsurf, Cody), monitors their file system changes, network connections, and command execution in real time, and alerts you to risky behavior through native macOS notifications.
 
 ## Key Features
 
+- **Automatic Agent Detection** -- Scans running processes via `libproc` to detect AI agents (Claude, Cursor, Copilot, Aider, Windsurf, Cody) and begins independent monitoring automatically
 - **Process Wrapping via PTY** -- Transparently wraps AI agent processes using `portable-pty`, capturing all commands and output in real time
-- **Risk Scoring Engine** -- 134 built-in rules across four severity levels (Critical / High / Medium / Low) to flag destructive commands, privilege escalation, and pipe-to-shell patterns
+- **Risk Scoring Engine** -- 29 built-in rules across four severity levels (Critical / High / Medium / Low) to flag destructive commands, privilege escalation, and pipe-to-shell patterns
 - **File System Monitoring** -- Real-time tracking of file changes using macOS FSEvents, with configurable watch paths and debounce
 - **Network Connection Tracking** -- Monitors TCP/UDP connections via `libproc`, with host whitelisting support
-- **Sensitive Data Masking** -- 50+ detection patterns for API keys, tokens, passwords, and URLs to prevent accidental exposure in logs
+- **macOS Notifications** -- Native notification system with configurable risk level threshold, sound, and badge support
+- **Sensitive Data Masking** -- 42 detection patterns for API keys, tokens, passwords, and URLs to prevent accidental exposure in logs
 - **Command Analysis** -- Standalone `analyze` subcommand for quick risk assessment of any command
 - **Dual Storage Backends** -- Session logs saved as JSONL files and/or SQLite databases
-- **Native macOS App** -- SwiftUI menu bar app with dashboard, session list, and VoiceOver accessibility
+- **Native macOS App** -- SwiftUI menu bar app with dashboard (Events, Live Log, Charts), session management, settings, and VoiceOver accessibility
 - **Internationalization** -- CLI uses fluent-rs; macOS app uses Localizable.strings
 
 ## Architecture
@@ -24,14 +26,15 @@ A macOS-native monitoring and security tool that wraps AI coding agents (Claude 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   macOS App (Swift)                  │
-│         SwiftUI  ·  MVVM  ·  Menu Bar               │
+│    SwiftUI  ·  MVVM  ·  Menu Bar  ·  Notifications  │
 └──────────────────────┬──────────────────────────────┘
                        │ UniFFI Bridge
 ┌──────────────────────┴──────────────────────────────┐
 │                  Core Library (Rust)                 │
-│  Event System · Risk Scorer · Process Wrapper (PTY) │
-│  FSEvents · Network Monitor · Sensitive Detection   │
-│  Config (TOML) · Storage (JSONL + SQLite) · i18n    │
+│  Agent Detector · Event System · Risk Scorer        │
+│  Process Wrapper (PTY) · FSEvents · Network Monitor │
+│  Sensitive Detection · Config (TOML) · Storage      │
+│  JSONL + SQLite · i18n                              │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────┴──────────────────────────────┐
@@ -105,6 +108,33 @@ macagentwatch analyze sudo chmod 777 /etc/passwd
 | `--log-dir <path>` | Directory for session logs |
 | `-c, --config <path>` | Configuration file path |
 
+## macOS App
+
+The native macOS app runs as a menu bar extra and provides a full monitoring dashboard.
+
+### Features
+
+- **Menu Bar Status** -- Quick access to monitoring controls and status indicator
+- **Auto-Start Monitoring** -- Automatically begins monitoring when AI agents are detected at launch
+- **Dashboard** -- Three-tab interface with Events, Live Log, and Charts views
+- **Session Management** -- Session list with event counts and active session indicators
+- **Activity Summary** -- Cards showing total, critical, high, medium, and low event counts
+- **Event Inspector** -- Detailed view of individual events with full metadata
+- **Settings** -- Four-tab settings window (General, Monitoring, Sensitive Files, Notifications)
+- **Theme Selection** -- System, Light, and Dark theme support
+- **Keyboard Shortcuts** -- Start (⌘⇧M), Stop (⌘⇧.), Restart (⌘⇧R), Refresh (⌘R), tab switching (⌘1/2/3)
+- **VoiceOver Accessibility** -- Full accessibility support with labeled controls
+
+### Building the App
+
+```bash
+# Build FFI bindings first, then the app
+make build-app
+
+# Or open in Xcode directly
+open app/MacAgentWatch/MacAgentWatch.xcodeproj
+```
+
 ## Configuration
 
 MacAgentWatch reads configuration from `~/.macagentwatch/config.toml`. All fields are optional and fall back to sensible defaults.
@@ -133,6 +163,12 @@ network_whitelist = ["api.anthropic.com", "github.com", "api.github.com"]
 [alerts]
 min_level = "high"
 custom_high_risk = ["docker rm", "kubectl delete"]
+
+[notifications]
+enabled = true
+min_risk_level = "high"
+sound_enabled = true
+badge_enabled = true
 ```
 
 ## Building from Source
@@ -145,6 +181,9 @@ cargo build --workspace
 
 # Release build
 cargo build --release --workspace
+
+# Production build (LTO + strip)
+cargo build --profile release-prod --workspace
 
 # Run tests
 cargo test --workspace
@@ -171,17 +210,23 @@ Or open `app/MacAgentWatch/MacAgentWatch.xcodeproj` in Xcode directly.
 make              # lint + test + build (default)
 make build        # debug build
 make build-release # release build
+make build-prod   # production build (LTO, strip, single codegen unit)
 make test         # run all tests
 make lint         # run clippy
 make fmt          # check formatting
 make fmt-fix      # auto-fix formatting
+make build-ffi    # build UniFFI bindings (release)
+make build-ffi-debug # build UniFFI bindings (debug)
+make build-app    # build Swift app (requires Xcode)
+make audit        # run cargo-audit security check
+make e2e          # run end-to-end tests
 make clean        # remove all build artifacts
 make help         # show all targets
 ```
 
 ### Test Suite
 
-The project includes 300+ Rust tests and 71 Swift tests covering the core library, CLI, and macOS app.
+The project includes 270+ Rust tests and 102 Swift tests covering the core library, CLI, and macOS app.
 
 ```bash
 # Run Rust tests
@@ -198,21 +243,22 @@ agent-watch/
 ├── core/                     # Rust core library (macagentwatch-core)
 │   └── src/
 │       ├── lib.rs            # Public API
+│       ├── agent_detector.rs # AI agent auto-detection (libproc)
 │       ├── event.rs          # Event types and system
-│       ├── risk.rs           # Risk scoring engine (134 rules)
+│       ├── risk.rs           # Risk scoring engine (29 rules)
 │       ├── wrapper.rs        # Process wrapper (PTY)
 │       ├── process_tracker.rs # Child process tracking
 │       ├── fswatch.rs        # macOS FSEvents file monitoring
 │       ├── netmon.rs         # Network monitoring (libproc)
 │       ├── detector.rs       # Command pattern detection
-│       ├── sanitize.rs       # Sensitive data masking (50+ patterns)
+│       ├── sanitize.rs       # Sensitive data masking (42 patterns)
 │       ├── config.rs         # TOML configuration
 │       ├── storage.rs        # JSONL storage backend
 │       ├── sqlite_storage.rs # SQLite storage backend
 │       ├── logger.rs         # Formatted log output
 │       ├── error.rs          # Error types
 │       ├── ffi.rs            # UniFFI bridge definitions
-│       └── types.rs          # i18n types module
+│       └── types.rs          # Shared types and i18n
 ├── cli/                      # CLI application (macagentwatch)
 │   └── src/
 │       ├── main.rs           # CLI entry point (clap)
@@ -220,18 +266,19 @@ agent-watch/
 ├── app/                      # macOS application (Swift)
 │   ├── MacAgentWatch/
 │   │   ├── MacAgentWatchApp.swift
-│   │   ├── ContentView.swift
-│   │   ├── Core/             # Bridge types and FFI wrappers
+│   │   ├── Core/             # Bridge types, FFI wrappers, notifications
 │   │   ├── ViewModels/       # MVVM view models (@Observable)
-│   │   ├── Views/            # SwiftUI views (Dashboard, MenuBar, etc.)
+│   │   ├── Views/            # SwiftUI views (Dashboard, MenuBar, Settings, etc.)
 │   │   └── en.lproj/         # Localized strings
-│   └── MacAgentWatchTests/   # Swift unit tests
+│   └── MacAgentWatchTests/   # Swift unit tests (102 tests)
 ├── scripts/
-│   └── build-ffi.sh          # UniFFI binding generation script
+│   ├── build-ffi.sh          # UniFFI binding generation script
+│   ├── e2e-test.sh           # End-to-end test script
+│   └── setup-signing.sh      # Code signing setup
 ├── .github/workflows/
 │   └── ci.yml                # GitHub Actions (fmt, clippy, test, build, audit)
 ├── Cargo.toml                # Workspace manifest
-└── Makefile                  # Build automation
+└── Makefile                  # Build automation (15 targets)
 ```
 
 ## Tech Stack
@@ -239,6 +286,7 @@ agent-watch/
 | Layer | Technology |
 |---|---|
 | Core library | Rust, serde, chrono, uuid |
+| Agent detection | libproc (process scanning) |
 | Process wrapping | portable-pty |
 | File monitoring | macOS FSEvents (fsevent crate) |
 | Network monitoring | libproc |
@@ -247,6 +295,7 @@ agent-watch/
 | FFI bridge | UniFFI |
 | CLI | clap, colored, fluent-rs |
 | macOS app | Swift, SwiftUI, MVVM |
+| Notifications | UNUserNotificationCenter |
 | CI | GitHub Actions |
 
 ## Contributing
@@ -259,4 +308,4 @@ agent-watch/
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
