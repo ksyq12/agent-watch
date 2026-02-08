@@ -30,10 +30,16 @@ final class MonitoringViewModel {
     var isSearchFocused: Bool = false
     var isWaitingForAgents: Bool = false
     var sessionEventCounts: [String: Int] = [:]
+    var sessionRiskSummaries: [String: ActivitySummary] = [:]
     var isChartFilterActive: Bool = false
     var selectedTimelineBucket: Date? = nil
     var selectedRiskSector: RiskLevel? = nil
     var selectedEventTypeBar: EventTypeFilter? = nil
+
+    var hasCriticalAlert: Bool {
+        recentAlerts.contains { $0.riskLevel == .critical }
+    }
+
     private var autoRetryTimer: Timer?
 
     var selectedTheme: AppThemeMode {
@@ -309,6 +315,12 @@ final class MonitoringViewModel {
     func loadSessionEventCount(for session: SessionInfo) {
         let count = bridge.getSessionEventCount(path: session.filePath)
         sessionEventCounts[session.id] = count
+    }
+
+    func loadSessionRiskSummary(for session: SessionInfo) {
+        guard sessionRiskSummaries[session.id] == nil else { return }
+        let summary = bridge.getSessionRiskSummary(path: session.filePath)
+        sessionRiskSummaries[session.id] = summary
     }
 
     func sessionDisplayName(for session: SessionInfo) -> String {

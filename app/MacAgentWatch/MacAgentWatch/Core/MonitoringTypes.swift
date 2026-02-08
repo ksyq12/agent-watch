@@ -141,6 +141,8 @@ struct SessionInfo: Identifiable, Hashable {
     let filePath: String
     let startTime: Date?
     let startTimeString: String
+    let agentName: String?
+    let maxRiskLevel: RiskLevel
 }
 
 enum EventTypeFilter: String, CaseIterable {

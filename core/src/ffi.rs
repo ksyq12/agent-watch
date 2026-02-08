@@ -151,6 +151,8 @@ pub struct FfiSessionInfo {
     pub session_id: String,
     pub file_path: String,
     pub start_time_str: String,
+    pub agent_name: Option<String>,
+    pub max_risk_level: FfiRiskLevel,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -531,10 +533,15 @@ pub fn list_session_logs() -> Result<Vec<FfiSessionInfo>, FfiError> {
             String::new()
         };
 
+        // Extract agent_name from session header and compute max_risk_level
+        let (agent_name, max_risk_level) = extract_session_metadata(&path.to_string_lossy());
+
         sessions.push(FfiSessionInfo {
             session_id,
             file_path: path.to_string_lossy().to_string(),
             start_time_str,
+            agent_name,
+            max_risk_level,
         });
     }
 
@@ -566,9 +573,82 @@ pub fn get_activity_summary(events: Vec<FfiEvent>) -> Result<FfiActivitySummary,
     Ok(summary)
 }
 
+// ─── Helper: extract session metadata from JSONL header + events ──────────────
+
+/// Extract agent_name from session header and compute max_risk_level from events.
+/// Returns (Option<agent_name>, max_risk_level).
+fn extract_session_metadata(path: &str) -> (Option<String>, FfiRiskLevel) {
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (None, FfiRiskLevel::Low),
+    };
+    let reader = std::io::BufReader::new(file);
+    let mut agent_name: Option<String> = None;
+    let mut max_risk = RiskLevel::Low;
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Try parsing as session header (first line)
+        if agent_name.is_none() {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if val.get("type").and_then(|t| t.as_str()) == Some("session_start") {
+                    agent_name = val
+                        .get("agent_name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string());
+                    continue;
+                }
+            }
+        }
+
+        // Try parsing as event to find max risk level
+        if let Ok(event) = serde_json::from_str::<Event>(trimmed) {
+            if event.risk_level > max_risk {
+                max_risk = event.risk_level;
+                if max_risk == RiskLevel::Critical {
+                    break; // No need to continue, Critical is the maximum
+                }
+            }
+        }
+    }
+
+    (agent_name, max_risk.into())
+}
+
+#[uniffi::export]
+pub fn get_session_risk_summary(path: String) -> Result<FfiActivitySummary, FfiError> {
+    let events = parse_events_from_file(&path)?;
+    let mut summary = FfiActivitySummary {
+        total_events: events.len() as u32,
+        critical_count: 0,
+        high_count: 0,
+        medium_count: 0,
+        low_count: 0,
+    };
+
+    for event in &events {
+        match event.risk_level {
+            RiskLevel::Critical => summary.critical_count += 1,
+            RiskLevel::High => summary.high_count += 1,
+            RiskLevel::Medium => summary.medium_count += 1,
+            RiskLevel::Low => summary.low_count += 1,
+        }
+    }
+
+    Ok(summary)
+}
+
 // ─── Helper: parse events from JSONL file ─────────────────────────────────────
 
-/// Parse events from a JSONL session file, returning (Event, line_index) pairs.
+/// Parse events from a JSONL session file, returning Event objects.
 /// Skips session metadata lines (session_start/session_end) and empty lines.
 fn parse_events_from_file(path: &str) -> Result<Vec<Event>, FfiError> {
     let file = std::fs::File::open(path).map_err(|e| FfiError::Io {
@@ -825,26 +905,7 @@ impl FfiMonitoringEngine {
         })?;
 
         // 2. Create SessionLogger
-        let mut logger = SessionLogger::new(&log_dir, None).map_err(|e| {
-            *state = SessionState::Idle;
-            FfiError::Storage {
-                message: format!("Failed to create session logger: {}", e),
-            }
-        })?;
-
-        logger
-            .write_session_header(&process_name, std::process::id())
-            .map_err(|e| {
-                *state = SessionState::Idle;
-                FfiError::Storage {
-                    message: format!("Failed to write session header: {}", e),
-                }
-            })?;
-
-        let session_id = logger.session_id().to_string();
-        let logger = Arc::new(Mutex::new(logger));
-
-        // 3. Run AgentDetector
+        // 2b. Run AgentDetector first (need agent name for session header)
         let detector = AgentDetector::new();
         let raw_agents = detector.scan_for_agents();
         let detected_agents: Vec<FfiDetectedAgent> = raw_agents
@@ -862,6 +923,32 @@ impl FfiMonitoringEngine {
                 message: "No AI agents detected. Start an AI agent (Claude, Cursor, Copilot, etc.) before monitoring.".to_string(),
             });
         }
+
+        let first_agent_name = detected_agents.first().map(|a| a.name.clone());
+
+        // 3. Create SessionLogger with agent name
+        let mut logger = SessionLogger::new(&log_dir, None).map_err(|e| {
+            *state = SessionState::Idle;
+            FfiError::Storage {
+                message: format!("Failed to create session logger: {}", e),
+            }
+        })?;
+
+        logger
+            .write_session_header(
+                &process_name,
+                std::process::id(),
+                first_agent_name.as_deref(),
+            )
+            .map_err(|e| {
+                *state = SessionState::Idle;
+                FfiError::Storage {
+                    message: format!("Failed to write session header: {}", e),
+                }
+            })?;
+
+        let session_id = logger.session_id().to_string();
+        let logger = Arc::new(Mutex::new(logger));
 
         // 4. Create unified event channel
         let (unified_tx, unified_rx) = mpsc::channel::<Event>();
@@ -2049,5 +2136,239 @@ mod tests {
         let cloned = agent.clone();
         assert_eq!(cloned.pid, agent.pid);
         assert_eq!(cloned.name, agent.name);
+    }
+
+    // ─── 안건 3: Session Metadata Tests ────────────────────────────────────────
+
+    #[test]
+    fn test_ffi_session_info_new_fields() {
+        let info = FfiSessionInfo {
+            session_id: "test-123".to_string(),
+            file_path: "/tmp/test.jsonl".to_string(),
+            start_time_str: "2026-02-08T00:00:00Z".to_string(),
+            agent_name: Some("Claude Code".to_string()),
+            max_risk_level: FfiRiskLevel::High,
+        };
+        assert_eq!(info.agent_name, Some("Claude Code".to_string()));
+        assert_eq!(info.max_risk_level, FfiRiskLevel::High);
+    }
+
+    #[test]
+    fn test_ffi_session_info_no_agent() {
+        let info = FfiSessionInfo {
+            session_id: "test-456".to_string(),
+            file_path: "/tmp/test.jsonl".to_string(),
+            start_time_str: "2026-02-08T00:00:00Z".to_string(),
+            agent_name: None,
+            max_risk_level: FfiRiskLevel::Low,
+        };
+        assert!(info.agent_name.is_none());
+        assert_eq!(info.max_risk_level, FfiRiskLevel::Low);
+    }
+
+    #[test]
+    fn test_extract_session_metadata_with_agent_name() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let path = temp_dir.path().join("session-test.jsonl");
+
+        let header = serde_json::json!({
+            "type": "session_start",
+            "session_id": "test-123",
+            "session_start": "2026-02-08T00:00:00Z",
+            "process": "MacAgentWatch",
+            "pid": 1234,
+            "agent_name": "Claude Code"
+        });
+        let event = Event::new(
+            EventType::Command {
+                command: "ls".to_string(),
+                args: vec![],
+                exit_code: Some(0),
+            },
+            "bash".to_string(),
+            1,
+            RiskLevel::Low,
+        );
+        let content = format!("{}\n{}\n", header, serde_json::to_string(&event).unwrap());
+        std::fs::write(&path, content).unwrap();
+
+        let (agent_name, max_risk) = extract_session_metadata(&path.to_string_lossy());
+        assert_eq!(agent_name, Some("Claude Code".to_string()));
+        assert_eq!(max_risk, FfiRiskLevel::Low);
+    }
+
+    #[test]
+    fn test_extract_session_metadata_no_agent_name() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let path = temp_dir.path().join("session-test.jsonl");
+
+        // Legacy header without agent_name field
+        let header = serde_json::json!({
+            "type": "session_start",
+            "session_id": "test-123",
+            "process": "MacAgentWatch",
+            "pid": 1234
+        });
+        std::fs::write(&path, format!("{}\n", header)).unwrap();
+
+        let (agent_name, max_risk) = extract_session_metadata(&path.to_string_lossy());
+        assert!(agent_name.is_none());
+        assert_eq!(max_risk, FfiRiskLevel::Low);
+    }
+
+    #[test]
+    fn test_extract_session_metadata_max_risk_critical() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let path = temp_dir.path().join("session-test.jsonl");
+
+        let header = serde_json::json!({
+            "type": "session_start",
+            "session_id": "test-123",
+            "agent_name": "Cursor"
+        });
+        let low_event = Event::new(
+            EventType::Command {
+                command: "ls".to_string(),
+                args: vec![],
+                exit_code: Some(0),
+            },
+            "bash".to_string(),
+            1,
+            RiskLevel::Low,
+        );
+        let critical_event = Event::new(
+            EventType::Command {
+                command: "rm".to_string(),
+                args: vec!["-rf".to_string(), "/".to_string()],
+                exit_code: Some(1),
+            },
+            "bash".to_string(),
+            2,
+            RiskLevel::Critical,
+        );
+        let content = format!(
+            "{}\n{}\n{}\n",
+            header,
+            serde_json::to_string(&low_event).unwrap(),
+            serde_json::to_string(&critical_event).unwrap()
+        );
+        std::fs::write(&path, content).unwrap();
+
+        let (agent_name, max_risk) = extract_session_metadata(&path.to_string_lossy());
+        assert_eq!(agent_name, Some("Cursor".to_string()));
+        assert_eq!(max_risk, FfiRiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_extract_session_metadata_nonexistent_file() {
+        let (agent_name, max_risk) = extract_session_metadata("/nonexistent/path.jsonl");
+        assert!(agent_name.is_none());
+        assert_eq!(max_risk, FfiRiskLevel::Low);
+    }
+
+    #[test]
+    fn test_get_session_risk_summary() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let path = temp_dir.path().join("session-risk.jsonl");
+
+        let events = vec![
+            Event::new(
+                EventType::Command {
+                    command: "ls".to_string(),
+                    args: vec![],
+                    exit_code: Some(0),
+                },
+                "bash".to_string(),
+                1,
+                RiskLevel::Low,
+            ),
+            Event::new(
+                EventType::Command {
+                    command: "curl".to_string(),
+                    args: vec!["http://example.com".to_string()],
+                    exit_code: Some(0),
+                },
+                "bash".to_string(),
+                2,
+                RiskLevel::Medium,
+            ),
+            Event::new(
+                EventType::Command {
+                    command: "rm".to_string(),
+                    args: vec!["-rf".to_string(), "dir".to_string()],
+                    exit_code: Some(0),
+                },
+                "bash".to_string(),
+                3,
+                RiskLevel::High,
+            ),
+            Event::new(
+                EventType::Command {
+                    command: "rm".to_string(),
+                    args: vec!["-rf".to_string(), "/".to_string()],
+                    exit_code: Some(1),
+                },
+                "bash".to_string(),
+                4,
+                RiskLevel::Critical,
+            ),
+        ];
+
+        let content: String = events
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, content).unwrap();
+
+        let summary = get_session_risk_summary(path.to_string_lossy().to_string()).unwrap();
+        assert_eq!(summary.total_events, 4);
+        assert_eq!(summary.low_count, 1);
+        assert_eq!(summary.medium_count, 1);
+        assert_eq!(summary.high_count, 1);
+        assert_eq!(summary.critical_count, 1);
+    }
+
+    #[test]
+    fn test_get_session_risk_summary_empty() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let path = temp_dir.path().join("session-empty.jsonl");
+        std::fs::write(&path, "").unwrap();
+
+        let summary = get_session_risk_summary(path.to_string_lossy().to_string()).unwrap();
+        assert_eq!(summary.total_events, 0);
+        assert_eq!(summary.critical_count, 0);
+    }
+
+    #[test]
+    fn test_write_session_header_with_agent_name() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let log_dir = temp_dir.path().to_path_buf();
+
+        let mut logger = SessionLogger::new(&log_dir, Some("agent-test".to_string())).unwrap();
+        logger
+            .write_session_header("MacAgentWatch", 1234, Some("Claude Code"))
+            .unwrap();
+        logger.flush().unwrap();
+
+        let content = std::fs::read_to_string(logger.path()).unwrap();
+        assert!(content.contains("\"agent_name\":\"Claude Code\""));
+        assert!(content.contains("\"type\":\"session_start\""));
+    }
+
+    #[test]
+    fn test_write_session_header_without_agent_name() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let log_dir = temp_dir.path().to_path_buf();
+
+        let mut logger = SessionLogger::new(&log_dir, Some("no-agent-test".to_string())).unwrap();
+        logger
+            .write_session_header("MacAgentWatch", 1234, None)
+            .unwrap();
+        logger.flush().unwrap();
+
+        let content = std::fs::read_to_string(logger.path()).unwrap();
+        assert!(!content.contains("agent_name"));
+        assert!(content.contains("\"type\":\"session_start\""));
     }
 }

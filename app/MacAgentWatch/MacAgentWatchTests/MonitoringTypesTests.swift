@@ -224,18 +224,24 @@ final class MonitoringTypesTests: XCTestCase {
             sessionId: "session-20260206-143022-a1b2c3d4",
             filePath: "~/.macagentwatch/logs/session.jsonl",
             startTime: Date(),
-            startTimeString: "2026-02-06T14:30:22Z"
+            startTimeString: "2026-02-06T14:30:22Z",
+            agentName: "Claude Code",
+            maxRiskLevel: .high
         )
         XCTAssertEqual(session.id, "s1")
         XCTAssertEqual(session.sessionId, "session-20260206-143022-a1b2c3d4")
+        XCTAssertEqual(session.agentName, "Claude Code")
+        XCTAssertEqual(session.maxRiskLevel, .high)
     }
 
     func testSessionInfoHashable() {
         let session1 = SessionInfo(
-            id: "s1", sessionId: "abc", filePath: "/a", startTime: nil, startTimeString: "t1"
+            id: "s1", sessionId: "abc", filePath: "/a", startTime: nil, startTimeString: "t1",
+            agentName: nil, maxRiskLevel: .low
         )
         let session2 = SessionInfo(
-            id: "s1", sessionId: "abc", filePath: "/a", startTime: nil, startTimeString: "t1"
+            id: "s1", sessionId: "abc", filePath: "/a", startTime: nil, startTimeString: "t1",
+            agentName: nil, maxRiskLevel: .low
         )
         var set = Set<SessionInfo>()
         set.insert(session1)
@@ -246,7 +252,8 @@ final class MonitoringTypesTests: XCTestCase {
     func testSessionInfoNilStartTime() {
         let session = SessionInfo(
             id: "s2", sessionId: "nil", filePath: "/dev/null",
-            startTime: nil, startTimeString: ""
+            startTime: nil, startTimeString: "",
+            agentName: nil, maxRiskLevel: .low
         )
         XCTAssertNil(session.startTime)
     }
@@ -335,5 +342,52 @@ final class MonitoringTypesTests: XCTestCase {
     func testTypeTagSession() {
         let event = EventType.session(action: .start)
         XCTAssertEqual(event.typeTag, "[SES]")
+    }
+
+    // MARK: - 안건 3: SessionInfo Agent & Risk Fields
+
+    func testSessionInfoAgentNameField() {
+        let session = SessionInfo(
+            id: "s1", sessionId: "abc", filePath: "/a",
+            startTime: nil, startTimeString: "t1",
+            agentName: "Claude Code", maxRiskLevel: .high
+        )
+        XCTAssertEqual(session.agentName, "Claude Code")
+    }
+
+    func testSessionInfoNilAgentName() {
+        let session = SessionInfo(
+            id: "s2", sessionId: "def", filePath: "/b",
+            startTime: nil, startTimeString: "t2",
+            agentName: nil, maxRiskLevel: .low
+        )
+        XCTAssertNil(session.agentName)
+    }
+
+    func testSessionInfoMaxRiskLevel() {
+        let session = SessionInfo(
+            id: "s3", sessionId: "ghi", filePath: "/c",
+            startTime: nil, startTimeString: "t3",
+            agentName: "Cursor", maxRiskLevel: .critical
+        )
+        XCTAssertEqual(session.maxRiskLevel, .critical)
+    }
+
+    func testSessionInfoHashableWithNewFields() {
+        let session1 = SessionInfo(
+            id: "s1", sessionId: "abc", filePath: "/a",
+            startTime: nil, startTimeString: "t1",
+            agentName: "Claude Code", maxRiskLevel: .high
+        )
+        let session2 = SessionInfo(
+            id: "s1", sessionId: "abc", filePath: "/a",
+            startTime: nil, startTimeString: "t1",
+            agentName: "Claude Code", maxRiskLevel: .high
+        )
+        var set = Set<SessionInfo>()
+        set.insert(session1)
+        set.insert(session2)
+        XCTAssertEqual(set.count, 1,
+                       "Sessions with same fields should be equal")
     }
 }

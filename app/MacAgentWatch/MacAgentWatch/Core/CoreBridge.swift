@@ -137,6 +137,16 @@ final class CoreBridge {
         }
     }
 
+    func getSessionRiskSummary(path: String) -> ActivitySummary {
+        do {
+            let ffiSummary = try MacAgentWatch.getSessionRiskSummary(path: path)
+            return Self.convertActivitySummary(ffiSummary)
+        } catch {
+            print("[CoreBridge] Warning: FFI getSessionRiskSummary failed: \(error)")
+            return ActivitySummary()
+        }
+    }
+
     func getLatestEvents(path: String, sinceIndex: UInt32) -> [MonitoringEvent] {
         do {
             let ffiEvents = try MacAgentWatch.getLatestEvents(path: path, sinceIndex: sinceIndex)
@@ -294,7 +304,9 @@ final class CoreBridge {
             sessionId: ffiSession.sessionId,
             filePath: ffiSession.filePath,
             startTime: startTime,
-            startTimeString: ffiSession.startTimeStr
+            startTimeString: ffiSession.startTimeStr,
+            agentName: ffiSession.agentName,
+            maxRiskLevel: convertRiskLevel(ffiSession.maxRiskLevel)
         )
     }
 
@@ -477,14 +489,18 @@ final class CoreBridge {
             sessionId: "session-20260206-143022-a1b2c3d4",
             filePath: "~/.macagentwatch/logs/session-20260206-143022-a1b2c3d4.jsonl",
             startTime: Date(),
-            startTimeString: "2026-02-06T14:30:22Z"
+            startTimeString: "2026-02-06T14:30:22Z",
+            agentName: "Claude Code",
+            maxRiskLevel: .high
         ),
         SessionInfo(
             id: "session-2",
             sessionId: "session-20260205-091500-e5f6g7h8",
             filePath: "~/.macagentwatch/logs/session-20260205-091500-e5f6g7h8.jsonl",
             startTime: Date().addingTimeInterval(-86400),
-            startTimeString: "2026-02-05T09:15:00Z"
+            startTimeString: "2026-02-05T09:15:00Z",
+            agentName: "Cursor",
+            maxRiskLevel: .medium
         ),
     ]
 }

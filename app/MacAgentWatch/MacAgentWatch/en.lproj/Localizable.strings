@@ -316,3 +316,28 @@
 "a11y.charts.timeline.tap.hint" = "Tap a bar to filter events by that time period";
 "a11y.charts.risk.tap.hint" = "Tap a sector to filter events by risk level";
 "a11y.charts.eventType.tap.hint" = "Tap a bar to filter events by event type";
+
+// MARK: - Session Context (안건 3)
+"session.agent.unknown" = "Unknown Agent";
+"session.live.badge" = "LIVE";
+"session.risk.distribution" = "Risk Distribution";
+
+// MARK: - LiveLog Search & Filter (안건 3)
+"livelog.search.placeholder" = "Search logs...";
+"livelog.filter.showing" = "%lld/%lld lines";
+
+// MARK: - Accessibility: Session (안건 3)
+"a11y.session.agent.name" = "Agent: %@";
+"a11y.session.risk.badge" = "Maximum risk level: %@";
+"a11y.session.risk.distribution" = "Risk distribution";
+"a11y.session.live.badge" = "Live session";
+
+// MARK: - Accessibility: LiveLog Search (안건 3)
+"a11y.livelog.search" = "Search live log entries";
+"a11y.livelog.search.hint" = "Type to filter log entries by text content";
+"a11y.livelog.search.clear" = "Clear search";
+"a11y.livelog.filter.chip" = "%@ filter: %lld events";
+"a11y.livelog.filter.chip.hint" = "Double-tap to toggle this risk level filter";
+
+// MARK: - MenuBar Badge (안건 3)
+"a11y.menubar.critical.alert" = "Critical alert detected";

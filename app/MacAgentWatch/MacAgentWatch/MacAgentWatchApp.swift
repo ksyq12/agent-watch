@@ -4,8 +4,12 @@ import SwiftUI
 struct MacAgentWatchApp: App {
     @State private var viewModel = MonitoringViewModel()
 
+    private var menuBarIcon: String {
+        viewModel.hasCriticalAlert ? "exclamationmark.shield.fill" : "shield.checkered"
+    }
+
     var body: some Scene {
-        MenuBarExtra(String(localized: "app.name"), systemImage: "shield.checkered") {
+        MenuBarExtra(String(localized: "app.name"), systemImage: menuBarIcon) {
             MenuBarView(viewModel: viewModel)
         }
         .menuBarExtraStyle(.window)

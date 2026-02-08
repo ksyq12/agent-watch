@@ -439,7 +439,9 @@ final class MonitoringViewModelTests: XCTestCase {
             sessionId: "abc123def456",
             filePath: "/tmp/test.jsonl",
             startTime: date,
-            startTimeString: "2025-02-06T14:30:00Z"
+            startTimeString: "2025-02-06T14:30:00Z",
+            agentName: "Claude Code",
+            maxRiskLevel: .low
         )
         let displayName = viewModel.sessionDisplayName(for: session)
         // Should contain date components, not the hash
@@ -455,7 +457,9 @@ final class MonitoringViewModelTests: XCTestCase {
             sessionId: "xyz789",
             filePath: "/tmp/test.jsonl",
             startTime: nil,
-            startTimeString: "2025-02-06T14:30:00Z"
+            startTimeString: "2025-02-06T14:30:00Z",
+            agentName: nil,
+            maxRiskLevel: .low
         )
         let displayName = viewModel.sessionDisplayName(for: session)
         XCTAssertFalse(displayName.isEmpty,
@@ -486,7 +490,9 @@ final class MonitoringViewModelTests: XCTestCase {
             sessionId: "old-session-id",
             filePath: "/tmp/old.jsonl",
             startTime: Date().addingTimeInterval(-86400),
-            startTimeString: "2025-02-05T00:00:00Z"
+            startTimeString: "2025-02-05T00:00:00Z",
+            agentName: nil,
+            maxRiskLevel: .low
         )
         XCTAssertFalse(viewModel.isActiveSession(oldSession),
                        "Non-current session should not be active")
@@ -665,5 +671,56 @@ final class MonitoringViewModelTests: XCTestCase {
     func testSelectedEventTypeBarInitiallyNil() {
         XCTAssertNil(viewModel.selectedEventTypeBar,
                      "selectedEventTypeBar should be nil initially")
+    }
+
+    // MARK: - 안건 3: Session Metadata Tests
+
+    func testSessionRiskSummariesInitiallyEmpty() {
+        XCTAssertTrue(viewModel.sessionRiskSummaries.isEmpty,
+                      "sessionRiskSummaries should be empty initially")
+    }
+
+    func testHasCriticalAlertFalseWhenNoCritical() {
+        // Default state or non-critical events only
+        viewModel.analyzeCommand("ls", args: [])
+        XCTAssertFalse(viewModel.hasCriticalAlert,
+                       "hasCriticalAlert should be false when no critical alerts")
+    }
+
+    func testHasCriticalAlertTrueWithCriticalEvent() {
+        // Analyze a critical command (chmod 777 on /etc/passwd)
+        viewModel.analyzeCommand("chmod", args: ["777", "/etc/passwd"])
+        if viewModel.recentAlerts.contains(where: { $0.riskLevel == .critical }) {
+            XCTAssertTrue(viewModel.hasCriticalAlert,
+                          "hasCriticalAlert should be true when critical alert exists")
+        }
+    }
+
+    func testSessionInfoAgentNameAndMaxRiskLevel() {
+        let session = SessionInfo(
+            id: "s-agent",
+            sessionId: "test-agent-session",
+            filePath: "/tmp/test.jsonl",
+            startTime: Date(),
+            startTimeString: "2026-02-08T00:00:00Z",
+            agentName: "Claude Code",
+            maxRiskLevel: .critical
+        )
+        XCTAssertEqual(session.agentName, "Claude Code")
+        XCTAssertEqual(session.maxRiskLevel, .critical)
+    }
+
+    func testSessionInfoNilAgentName() {
+        let session = SessionInfo(
+            id: "s-nil",
+            sessionId: "test-nil-session",
+            filePath: "/tmp/test.jsonl",
+            startTime: Date(),
+            startTimeString: "2026-02-08T00:00:00Z",
+            agentName: nil,
+            maxRiskLevel: .low
+        )
+        XCTAssertNil(session.agentName)
+        XCTAssertEqual(session.maxRiskLevel, .low)
     }
 }

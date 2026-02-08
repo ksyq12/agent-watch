@@ -97,14 +97,22 @@ impl SessionLogger {
     }
 
     /// Write session metadata as first line
-    pub fn write_session_header(&mut self, process: &str, pid: u32) -> Result<(), CoreError> {
-        let header = serde_json::json!({
+    pub fn write_session_header(
+        &mut self,
+        process: &str,
+        pid: u32,
+        agent_name: Option<&str>,
+    ) -> Result<(), CoreError> {
+        let mut header = serde_json::json!({
             "session_id": self.session_id,
             "session_start": self.session_start.to_rfc3339(),
             "process": process,
             "pid": pid,
             "type": "session_start"
         });
+        if let Some(name) = agent_name {
+            header["agent_name"] = serde_json::Value::String(name.to_string());
+        }
         writeln!(self.writer, "{}", header).map_err(StorageError::Write)?;
         self.flush()?;
         Ok(())
@@ -305,7 +313,9 @@ mod tests {
 
         let mut logger = SessionLogger::new(&log_dir, Some("hf-test".to_string())).unwrap();
 
-        logger.write_session_header("test-process", 9999).unwrap();
+        logger
+            .write_session_header("test-process", 9999, None)
+            .unwrap();
         logger.write_event(&create_test_event()).unwrap();
         logger.write_session_footer(Some(0)).unwrap();
 
