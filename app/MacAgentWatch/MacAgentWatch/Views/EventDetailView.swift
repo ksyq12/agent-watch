@@ -296,16 +296,3 @@ struct EventDetailView: View {
     }
 }
 
-// MARK: - EventType Extension
-
-extension EventType {
-    var typeLabel: String {
-        switch self {
-        case .command: return String(localized: "event.type.command")
-        case .fileAccess: return String(localized: "event.type.fileAccess")
-        case .network: return String(localized: "event.type.network")
-        case .process: return String(localized: "event.type.process")
-        case .session: return String(localized: "event.type.session")
-        }
-    }
-}

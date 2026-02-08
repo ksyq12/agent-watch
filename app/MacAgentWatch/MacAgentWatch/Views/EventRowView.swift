@@ -18,7 +18,7 @@ struct EventRowView: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.riskLevel.label) risk, \(event.eventType.description), \(event.process), PID \(event.pid)")
+        .accessibilityLabel("\(event.riskLevel.label) risk, \(event.eventType.typeLabel), \(event.eventType.summaryText), \(event.process), PID \(event.pid)")
         .accessibilityHint(String(localized: "a11y.event.row.hint"))
     }
 
@@ -45,11 +45,19 @@ struct EventRowView: View {
 
     private var eventContent: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(event.eventType.description)
+            Text(event.eventType.summaryText)
                 .font(.system(.body, design: .monospaced))
                 .lineLimit(1)
+                .truncationMode(.middle)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Text(event.eventType.typeLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+
                 Label(event.process, systemImage: "gearshape")
                 Label(String(format: NSLocalizedString("event.pid", comment: ""), event.pid), systemImage: "number")
                 HStack(spacing: 2) {

@@ -142,22 +142,38 @@ struct MenuBarView: View {
                 .foregroundStyle(riskColor(event.riskLevel))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(event.eventType.description)
+                Text(event.eventType.summaryText)
                     .font(.caption)
                     .lineLimit(1)
-                Text(event.process)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    Text(event.eventType.typeLabel)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text(event.process)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
 
-            Text(event.timestamp, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(event.riskLevel.label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(riskColor(event.riskLevel))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(riskColor(event.riskLevel).opacity(0.12), in: Capsule())
+                Text(event.timestamp, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(String(format: String(localized: "a11y.risk.indicator"), String(describing: event.riskLevel)))
+        .accessibilityLabel("\(event.riskLevel.label) risk, \(event.eventType.typeLabel), \(event.eventType.summaryText), \(event.process)")
         .accessibilityHint(String(localized: "a11y.alert.row.hint"))
     }
 

@@ -134,6 +134,9 @@ struct LiveLogView: View {
             Text(verbatim: "[\(entry.process)]")
                 .foregroundStyle(.secondary)
 
+            Text(entry.typeTag)
+                .foregroundStyle(.tint)
+
             Text(entry.message)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -145,7 +148,7 @@ struct LiveLogView: View {
         .padding(.horizontal, 4)
         .background(entry.riskLevel >= .high ? riskColor(entry.riskLevel).opacity(0.06) : .clear)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.timeString), \(entry.riskLevel.label), \(entry.process), \(entry.message)")
+        .accessibilityLabel("\(entry.timeString), \(entry.riskLevel.label), \(entry.process), \(entry.typeTag), \(entry.message)")
     }
 
     // MARK: - Actions
@@ -190,8 +193,9 @@ struct LiveLogView: View {
             let entry = LiveLogEntry(
                 timestamp: event.timestamp,
                 process: event.process,
-                message: event.eventType.description,
-                riskLevel: event.riskLevel
+                message: event.eventType.summaryText,
+                riskLevel: event.riskLevel,
+                typeTag: event.eventType.typeTag
             )
             logEntries.append(entry)
         }
@@ -221,6 +225,7 @@ struct LiveLogEntry: Identifiable {
     let process: String
     let message: String
     let riskLevel: RiskLevel
+    let typeTag: String
 
     var timeString: String {
         Self.formatter.string(from: timestamp)

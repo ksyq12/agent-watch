@@ -250,4 +250,90 @@ final class MonitoringTypesTests: XCTestCase {
         )
         XCTAssertNil(session.startTime)
     }
+
+    // MARK: - EventType summaryText
+
+    func testSummaryTextCommand() {
+        let event = EventType.command(command: "git", args: ["clone", "https://github.com/repo.git"], exitCode: 0)
+        XCTAssertEqual(event.summaryText, "git clone https://github.com/repo.git")
+    }
+
+    func testSummaryTextCommandNoArgs() {
+        let event = EventType.command(command: "ls", args: [], exitCode: nil)
+        XCTAssertEqual(event.summaryText, "ls")
+    }
+
+    func testSummaryTextFileAccess() {
+        let event = EventType.fileAccess(path: "/Users/test/.env", action: .read)
+        XCTAssertEqual(event.summaryText, "read: /Users/test/.env")
+    }
+
+    func testSummaryTextNetwork() {
+        let event = EventType.network(host: "api.anthropic.com", port: 443, protocol: "tcp")
+        XCTAssertEqual(event.summaryText, "tcp://api.anthropic.com:443")
+    }
+
+    func testSummaryTextProcess() {
+        let event = EventType.process(pid: 5678, ppid: 1, action: .start)
+        XCTAssertEqual(event.summaryText, "start (PID: 5678)")
+    }
+
+    func testSummaryTextSession() {
+        let event = EventType.session(action: .end)
+        XCTAssertEqual(event.summaryText, "Session end")
+    }
+
+    func testSummaryTextTruncationAt80Chars() {
+        let longArgs = (0..<20).map { "arg\($0)" }
+        let event = EventType.command(command: "longcommand", args: longArgs, exitCode: 0)
+        let summary = event.summaryText
+        XCTAssertLessThanOrEqual(summary.count, 80)
+        XCTAssertTrue(summary.hasSuffix("…"))
+    }
+
+    func testSummaryTextNoTruncationUnder80() {
+        let event = EventType.command(command: "ls", args: ["-la"], exitCode: 0)
+        let summary = event.summaryText
+        XCTAssertEqual(summary, "ls -la")
+        XCTAssertFalse(summary.hasSuffix("…"))
+    }
+
+    func testSummaryTextExactly80CharsNotTruncated() {
+        // "read: /" (7 chars) + 73 "a"s = 80 chars total
+        let path = "/" + String(repeating: "a", count: 73)
+        let event = EventType.fileAccess(path: path, action: .read)
+        let expected = "read: " + path
+        XCTAssertEqual(expected.count, 80)
+        let summary = event.summaryText
+        XCTAssertEqual(summary.count, 80)
+        XCTAssertFalse(summary.hasSuffix("…"))
+        XCTAssertEqual(summary, expected)
+    }
+
+    // MARK: - EventType typeTag
+
+    func testTypeTagCommand() {
+        let event = EventType.command(command: "ls", args: [], exitCode: 0)
+        XCTAssertEqual(event.typeTag, "[CMD]")
+    }
+
+    func testTypeTagFileAccess() {
+        let event = EventType.fileAccess(path: "/tmp", action: .read)
+        XCTAssertEqual(event.typeTag, "[FILE]")
+    }
+
+    func testTypeTagNetwork() {
+        let event = EventType.network(host: "example.com", port: 80, protocol: "tcp")
+        XCTAssertEqual(event.typeTag, "[NET]")
+    }
+
+    func testTypeTagProcess() {
+        let event = EventType.process(pid: 1, ppid: nil, action: .fork)
+        XCTAssertEqual(event.typeTag, "[PROC]")
+    }
+
+    func testTypeTagSession() {
+        let event = EventType.session(action: .start)
+        XCTAssertEqual(event.typeTag, "[SES]")
+    }
 }

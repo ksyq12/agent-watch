@@ -87,6 +87,32 @@ enum EventType {
             return "Session \(action.rawValue)"
         }
     }
+
+    var summaryText: String {
+        let text = description
+        if text.count <= 80 { return text }
+        return String(text.prefix(79)) + "…"
+    }
+
+    var typeTag: String {
+        switch self {
+        case .command: return "[CMD]"
+        case .fileAccess: return "[FILE]"
+        case .network: return "[NET]"
+        case .process: return "[PROC]"
+        case .session: return "[SES]"
+        }
+    }
+
+    var typeLabel: String {
+        switch self {
+        case .command: return String(localized: "event.type.command")
+        case .fileAccess: return String(localized: "event.type.fileAccess")
+        case .network: return String(localized: "event.type.network")
+        case .process: return String(localized: "event.type.process")
+        case .session: return String(localized: "event.type.session")
+        }
+    }
 }
 
 struct MonitoringEvent: Identifiable {

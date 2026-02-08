@@ -94,7 +94,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func notificationBody(for event: MonitoringEvent) -> String {
-        return "\(event.process): \(event.eventType.description)"
+        return "\(event.process): \(event.eventType.summaryText)"
     }
 
     // MARK: - UNUserNotificationCenterDelegate
