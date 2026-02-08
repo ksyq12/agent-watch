@@ -25,7 +25,7 @@ struct SettingsView: View {
                     Label(String(localized: "settings.tab.notifications"), systemImage: "bell")
                 }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 500, height: 460)
     }
 }
 
@@ -43,6 +43,7 @@ struct GeneralSettingsTab: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
             Section(String(localized: "settings.general.logging")) {
@@ -75,7 +76,7 @@ struct GeneralSettingsTab: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 
@@ -95,7 +96,7 @@ struct MonitoringSettingsTab: View {
                 Toggle(String(localized: "settings.monitoring.network.enabled"), isOn: $viewModel.networkMonitorEnabled)
             }
 
-            Section(String(localized: "settings.monitoring.polling")) {
+            Section {
                 HStack {
                     Text(String(localized: "settings.monitoring.polling"))
                     Spacer()
@@ -149,7 +150,7 @@ struct MonitoringSettingsTab: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 
@@ -238,7 +239,7 @@ struct SensitiveFilesSettingsTab: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
 
@@ -270,6 +271,6 @@ struct NotificationSettingsTab: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
+        .formStyle(.grouped)
     }
 }
