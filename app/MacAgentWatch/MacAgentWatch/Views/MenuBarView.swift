@@ -165,6 +165,35 @@ struct MenuBarView: View {
 
     private var actionsSection: some View {
         VStack(spacing: 4) {
+            if viewModel.isWaitingForAgents {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(String(localized: "menubar.scanning"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else if viewModel.isMonitoring {
+                Button {
+                    viewModel.stopMonitoring()
+                } label: {
+                    Label(String(localized: "menubar.stop.monitoring"), systemImage: "stop.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless)
+            } else {
+                Button {
+                    viewModel.startMonitoring()
+                } label: {
+                    Label(String(localized: "menubar.start.monitoring"), systemImage: "play.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless)
+            }
+
+            Divider()
+
             Button {
                 openWindow(id: "dashboard")
             } label: {

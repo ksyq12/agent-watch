@@ -53,24 +53,95 @@ struct DashboardView: View {
 
     private var detailContent: some View {
         VStack(spacing: 0) {
-            ActivityCardsView(summary: viewModel.activitySummary)
-                .padding()
+            if !viewModel.isMonitoring && viewModel.events.isEmpty {
+                emptyStateView
+            } else {
+                if let error = viewModel.errorMessage {
+                    errorBanner(message: error)
+                }
 
-            detailTabPicker
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                ActivityCardsView(summary: viewModel.activitySummary)
+                    .padding()
 
-            Divider()
+                detailTabPicker
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
 
-            switch viewModel.selectedTab {
-            case .events:
-                eventsContent
-            case .liveLog:
-                LiveLogView(viewModel: viewModel)
-            case .charts:
-                ChartsView(viewModel: viewModel)
+                Divider()
+
+                switch viewModel.selectedTab {
+                case .events:
+                    eventsContent
+                case .liveLog:
+                    LiveLogView(viewModel: viewModel)
+                case .charts:
+                    ChartsView(viewModel: viewModel)
+                }
             }
         }
+    }
+
+    // MARK: - Empty State
+
+    @ViewBuilder
+    private var emptyStateView: some View {
+        if let error = viewModel.errorMessage {
+            errorBanner(message: error)
+        }
+
+        Spacer()
+
+        if viewModel.isWaitingForAgents {
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .padding(.bottom, 4)
+                Text(String(localized: "empty.waiting.title"))
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                Text(String(localized: "empty.waiting.subtitle"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(spacing: 16) {
+                Image(systemName: "eye.slash")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "empty.inactive.title"))
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                Button(String(localized: "empty.inactive.button")) {
+                    viewModel.startMonitoring()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+
+        Spacer()
+    }
+
+    // MARK: - Error Banner
+
+    private func errorBanner(message: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.callout)
+            Spacer()
+            Button {
+                viewModel.errorMessage = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal)
+        .padding(.top, 8)
     }
 
     // MARK: - Detail Tab Picker

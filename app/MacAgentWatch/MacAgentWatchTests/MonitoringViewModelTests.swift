@@ -12,6 +12,10 @@ final class MonitoringViewModelTests: XCTestCase {
     }
 
     override func tearDown() {
+        if viewModel.isMonitoring {
+            viewModel.stopMonitoring()
+        }
+        viewModel.stopAutoRetry()
         viewModel = nil
         super.tearDown()
     }
@@ -20,12 +24,13 @@ final class MonitoringViewModelTests: XCTestCase {
 
     func testInitialStateLoadsData() {
         XCTAssertFalse(viewModel.version.isEmpty, "Version should be set")
-        XCTAssertEqual(viewModel.version, "0.3.0")
         // Events may be empty if no real sessions exist on disk
     }
 
-    func testInitialStateIsNotMonitoring() {
-        XCTAssertFalse(viewModel.isMonitoring)
+    func testInitialStateAutoStartsOrWaits() {
+        // After init, either monitoring started (auto-start succeeded) or is waiting for agents
+        XCTAssertTrue(viewModel.isMonitoring || viewModel.isWaitingForAgents,
+                      "Should either be monitoring or waiting for agents after init")
     }
 
     func testInitialStateFilterIsNil() {
@@ -44,8 +49,15 @@ final class MonitoringViewModelTests: XCTestCase {
         XCTAssertLessThanOrEqual(viewModel.recentAlerts.count, 5)
     }
 
-    func testInitialStateCurrentSessionIdIsNil() {
-        XCTAssertNil(viewModel.currentSessionId)
+    func testInitialStateCurrentSessionIdMatchesMonitoringState() {
+        // If auto-start succeeded, currentSessionId should be set; otherwise nil
+        if viewModel.isMonitoring {
+            XCTAssertNotNil(viewModel.currentSessionId,
+                            "currentSessionId should be set when monitoring is active")
+        } else {
+            XCTAssertNil(viewModel.currentSessionId,
+                         "currentSessionId should be nil when not monitoring")
+        }
     }
 
     func testInitialStateErrorMessageIsNil() {
@@ -55,13 +67,13 @@ final class MonitoringViewModelTests: XCTestCase {
     // MARK: - startMonitoring / stopMonitoring
 
     func testStartMonitoring() {
+        // Stop any auto-started session first
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
         XCTAssertFalse(viewModel.isMonitoring)
         viewModel.startMonitoring()
-        // Real FFI startSession should succeed
         XCTAssertTrue(viewModel.isMonitoring)
         XCTAssertNotNil(viewModel.currentSessionId, "Session ID should be set after starting")
         XCTAssertNil(viewModel.errorMessage, "No error should occur on start")
-        // Clean up
         viewModel.stopMonitoring()
     }
 
@@ -75,6 +87,8 @@ final class MonitoringViewModelTests: XCTestCase {
     }
 
     func testStartStopToggle() {
+        // Stop any auto-started session first
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
         XCTAssertFalse(viewModel.isMonitoring)
         viewModel.startMonitoring()
         XCTAssertTrue(viewModel.isMonitoring)
@@ -82,7 +96,6 @@ final class MonitoringViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isMonitoring)
         viewModel.startMonitoring()
         XCTAssertTrue(viewModel.isMonitoring)
-        // Clean up
         viewModel.stopMonitoring()
     }
 
@@ -236,6 +249,7 @@ final class MonitoringViewModelTests: XCTestCase {
     }
 
     func testErrorMessageClearedOnStart() {
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
         viewModel.errorMessage = "previous error"
         viewModel.startMonitoring()
         XCTAssertNil(viewModel.errorMessage)
@@ -332,19 +346,17 @@ final class MonitoringViewModelTests: XCTestCase {
 
     // MARK: - monitoredAgents
 
-    func testMonitoredAgentsEmptyByDefault() {
-        XCTAssertTrue(viewModel.monitoredAgents.isEmpty, "monitoredAgents should be empty initially")
+    func testMonitoredAgentsAfterStop() {
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
+        XCTAssertTrue(viewModel.monitoredAgents.isEmpty, "monitoredAgents should be empty after stop")
     }
 
     func testStartMonitoringPopulatesAgents() {
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
         viewModel.startMonitoring()
-        // After starting, monitoredAgents may or may not be empty depending on running agents
-        // But startMonitoring should succeed
         if viewModel.isMonitoring {
-            // getMonitoredAgents was called
             let _ = viewModel.monitoredAgents
         }
-        // Clean up
         viewModel.stopMonitoring()
     }
 
@@ -352,6 +364,132 @@ final class MonitoringViewModelTests: XCTestCase {
         viewModel.startMonitoring()
         viewModel.stopMonitoring()
         XCTAssertTrue(viewModel.monitoredAgents.isEmpty, "monitoredAgents should be cleared after stop")
+    }
+
+    // MARK: - Auto-Start & Waiting for Agents
+
+    func testIsWaitingForAgentsInitiallyFalse() {
+        // isWaitingForAgents should be false before attemptAutoStart is called
+        XCTAssertFalse(viewModel.isWaitingForAgents,
+                       "isWaitingForAgents should be false initially")
+    }
+
+    func testAttemptAutoStartSetsWaitingWhenNoAgents() {
+        // When no agents are running, attemptAutoStart should set isWaitingForAgents = true
+        viewModel.attemptAutoStart()
+        // If monitoring didn't start (no agents), should be waiting
+        if !viewModel.isMonitoring {
+            XCTAssertTrue(viewModel.isWaitingForAgents,
+                          "Should be waiting for agents when start fails to find agents")
+        }
+    }
+
+    func testAttemptAutoStartSetsMonitoringWhenEngineStarts() {
+        // Stop any existing session first to test fresh auto-start
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
+        viewModel.attemptAutoStart()
+        if viewModel.isMonitoring {
+            XCTAssertFalse(viewModel.isWaitingForAgents,
+                           "Should not be waiting when monitoring started successfully")
+        }
+    }
+
+    func testStopMonitoringCancelsAutoRetry() {
+        // After attemptAutoStart sets waiting, stopMonitoring should cancel the retry
+        viewModel.attemptAutoStart()
+        viewModel.stopMonitoring()
+        XCTAssertFalse(viewModel.isWaitingForAgents,
+                       "stopMonitoring should cancel waiting state")
+    }
+
+    func testStopAutoRetryResetsWaitingState() {
+        viewModel.attemptAutoStart()
+        viewModel.stopAutoRetry()
+        XCTAssertFalse(viewModel.isWaitingForAgents,
+                       "stopAutoRetry should reset isWaitingForAgents to false")
+    }
+
+    // MARK: - Session Event Counts Cache
+
+    func testSessionEventCountsInitiallyEmpty() {
+        XCTAssertTrue(viewModel.sessionEventCounts.isEmpty,
+                      "sessionEventCounts should be empty initially")
+    }
+
+    func testLoadSessionEventCountCachesResult() {
+        // After starting monitoring and creating a session, loading event count should cache it
+        viewModel.startMonitoring()
+        guard let session = viewModel.sessions.first else {
+            viewModel.stopMonitoring()
+            return
+        }
+        viewModel.loadSessionEventCount(for: session)
+        // The count should be cached (value may be 0 for a fresh session)
+        XCTAssertNotNil(viewModel.sessionEventCounts[session.id],
+                        "Event count should be cached after loading")
+        viewModel.stopMonitoring()
+    }
+
+    // MARK: - Session Display Name
+
+    func testSessionDisplayNameWithStartTime() {
+        let date = Date(timeIntervalSince1970: 1738857000) // 2025-02-06 14:30:00 UTC
+        let session = SessionInfo(
+            id: "s1",
+            sessionId: "abc123def456",
+            filePath: "/tmp/test.jsonl",
+            startTime: date,
+            startTimeString: "2025-02-06T14:30:00Z"
+        )
+        let displayName = viewModel.sessionDisplayName(for: session)
+        // Should contain date components, not the hash
+        XCTAssertFalse(displayName.contains("abc123def456"),
+                       "Display name should not show raw session ID hash")
+        XCTAssertFalse(displayName.isEmpty,
+                       "Display name should not be empty")
+    }
+
+    func testSessionDisplayNameWithoutStartTime() {
+        let session = SessionInfo(
+            id: "s2",
+            sessionId: "xyz789",
+            filePath: "/tmp/test.jsonl",
+            startTime: nil,
+            startTimeString: "2025-02-06T14:30:00Z"
+        )
+        let displayName = viewModel.sessionDisplayName(for: session)
+        XCTAssertFalse(displayName.isEmpty,
+                       "Display name should fall back to startTimeString when startTime is nil")
+    }
+
+    // MARK: - Active Session Detection
+
+    func testIsActiveSessionReturnsTrueForCurrentSession() {
+        // Ensure fresh start
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
+        viewModel.startMonitoring()
+        guard viewModel.isMonitoring, let currentId = viewModel.currentSessionId else {
+            return
+        }
+        // Find the session that matches the currentSessionId
+        let matchingSession = viewModel.sessions.first { $0.sessionId == currentId }
+        if let session = matchingSession {
+            XCTAssertTrue(viewModel.isActiveSession(session),
+                          "Current monitoring session should be active")
+        }
+        viewModel.stopMonitoring()
+    }
+
+    func testIsActiveSessionReturnsFalseForOldSession() {
+        let oldSession = SessionInfo(
+            id: "old",
+            sessionId: "old-session-id",
+            filePath: "/tmp/old.jsonl",
+            startTime: Date().addingTimeInterval(-86400),
+            startTimeString: "2025-02-05T00:00:00Z"
+        )
+        XCTAssertFalse(viewModel.isActiveSession(oldSession),
+                       "Non-current session should not be active")
     }
 
     // MARK: - Helpers

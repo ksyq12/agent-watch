@@ -28,6 +28,9 @@ final class MonitoringViewModel {
     var liveEventIndex: UInt32 = 0
     var selectedTab: DetailTab = .events
     var isSearchFocused: Bool = false
+    var isWaitingForAgents: Bool = false
+    var sessionEventCounts: [String: Int] = [:]
+    private var autoRetryTimer: Timer?
 
     var selectedTheme: AppThemeMode {
         get {
@@ -124,6 +127,9 @@ final class MonitoringViewModel {
             await notificationManager.requestAuthorization()
             applyNotificationConfig()
         }
+        if !isMonitoring {
+            attemptAutoStart()
+        }
     }
 
     var notificationsEnabled: Bool {
@@ -206,6 +212,7 @@ final class MonitoringViewModel {
 
     func stopMonitoring() {
         errorMessage = nil
+        stopAutoRetry()
         if bridge.stopSession() {
             isMonitoring = false
             currentSessionId = nil
@@ -215,6 +222,68 @@ final class MonitoringViewModel {
             errorMessage = "Failed to stop monitoring session"
         }
     }
+
+    func attemptAutoStart() {
+        errorMessage = nil
+        do {
+            let sessionId = try bridge.startSession(processName: "MacAgentWatch")
+            currentSessionId = sessionId
+            isMonitoring = true
+            isWaitingForAgents = false
+            stopAutoRetry()
+            monitoredAgents = bridge.getMonitoredAgents()
+            sessions = bridge.listSessionLogs()
+            if let newSession = sessions.first {
+                loadSession(newSession)
+            }
+        } catch {
+            isWaitingForAgents = true
+            startAutoRetryTimer()
+        }
+    }
+
+    func stopAutoRetry() {
+        autoRetryTimer?.invalidate()
+        autoRetryTimer = nil
+        isWaitingForAgents = false
+    }
+
+    private func startAutoRetryTimer() {
+        autoRetryTimer?.invalidate()
+        autoRetryTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.isWaitingForAgents, !self.isMonitoring else {
+                    self?.stopAutoRetry()
+                    return
+                }
+                self.attemptAutoStart()
+            }
+        }
+    }
+
+    func loadSessionEventCount(for session: SessionInfo) {
+        let count = bridge.getSessionEventCount(path: session.filePath)
+        sessionEventCounts[session.id] = count
+    }
+
+    func sessionDisplayName(for session: SessionInfo) -> String {
+        if let startTime = session.startTime {
+            return Self.displayDateFormatter.string(from: startTime)
+        }
+        return session.startTimeString
+    }
+
+    func isActiveSession(_ session: SessionInfo) -> Bool {
+        guard isMonitoring, let currentId = currentSessionId else { return false }
+        return session.sessionId == currentId
+    }
+
+    private static let displayDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
 
     func loadSession(_ session: SessionInfo) {
         selectedSession = session

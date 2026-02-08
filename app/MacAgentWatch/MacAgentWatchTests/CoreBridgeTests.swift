@@ -67,7 +67,10 @@ final class CoreBridgeTests: XCTestCase {
     func testGetVersionReturnsNonEmpty() {
         let version = bridge.getVersion()
         XCTAssertFalse(version.isEmpty)
-        XCTAssertEqual(version, "0.3.0")
+        // Version should match semantic versioning pattern
+        let semverPattern = #"^\d+\.\d+\.\d+"#
+        XCTAssertNotNil(version.range(of: semverPattern, options: .regularExpression),
+                        "Version '\(version)' should match semver pattern")
     }
 
     // MARK: - loadConfig

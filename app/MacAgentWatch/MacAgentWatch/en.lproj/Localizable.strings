@@ -253,3 +253,21 @@
 "notification.action.dismiss" = "Dismiss";
 "notification.permission.title" = "Enable Notifications";
 "notification.permission.message" = "Get alerts for high-risk agent activities";
+
+// MARK: - Empty State
+"empty.waiting.title" = "Waiting for AI Agents...";
+"empty.waiting.subtitle" = "Monitoring will start automatically when Claude Code is detected.";
+"empty.inactive.title" = "Monitoring is Inactive";
+"empty.inactive.button" = "Start Monitoring";
+
+// MARK: - Session List
+"session.events.count" = "%lld events";
+"a11y.session.active" = "Active session";
+
+// MARK: - Menu Bar Monitoring
+"menubar.scanning" = "Scanning for agents...";
+"menubar.start.monitoring" = "Start Monitoring";
+"menubar.stop.monitoring" = "Stop Monitoring";
+
+// MARK: - Error Banner
+"error.dismiss" = "Dismiss error";

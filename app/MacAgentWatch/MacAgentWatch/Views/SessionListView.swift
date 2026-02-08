@@ -8,8 +8,12 @@ struct SessionListView: View {
             SessionRowButton(
                 session: session,
                 isSelected: viewModel.selectedSession?.id == session.id,
+                isActive: viewModel.isActiveSession(session),
+                displayName: viewModel.sessionDisplayName(for: session),
+                eventCount: viewModel.sessionEventCounts[session.id],
                 onSelect: { viewModel.loadSession(session) }
             )
+            .onAppear { viewModel.loadSessionEventCount(for: session) }
         }
         .listStyle(.sidebar)
         .navigationTitle(String(localized: "sessions.title"))
@@ -19,60 +23,47 @@ struct SessionListView: View {
 private struct SessionRowButton: View {
     let session: SessionInfo
     let isSelected: Bool
+    let isActive: Bool
+    let displayName: String
+    let eventCount: Int?
     let onSelect: () -> Void
     @ScaledMetric(relativeTo: .body) private var rowVerticalPadding: CGFloat = 4
 
-    private static let dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Text(truncatedId)
-                        .font(.caption.weight(.medium).monospaced())
-                        .lineLimit(1)
+            HStack(spacing: 6) {
+                if isActive {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
                 }
 
-                timestampView
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(displayName)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+
+                Spacer()
+
+                if let eventCount, eventCount > 0 {
+                    Text("\(eventCount)")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                        .accessibilityLabel(String(format: NSLocalizedString("session.events.count", comment: ""), eventCount))
+                }
             }
             .padding(.vertical, rowVerticalPadding)
         }
         .buttonStyle(.plain)
         .listRowBackground(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(String(format: NSLocalizedString("a11y.session.row", comment: ""), session.sessionId, session.startTimeString))
+        .accessibilityLabel(String(format: NSLocalizedString("a11y.session.row", comment: ""), session.sessionId, displayName))
         .accessibilityHint(Text("a11y.session.hint"))
-        .accessibilityValue(session.startTimeString)
-    }
-
-    @ViewBuilder
-    private var timestampView: some View {
-        if let startTime = session.startTime {
-            Text(Self.dateTimeFormatter.string(from: startTime))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        } else {
-            Text(session.startTimeString)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    private var truncatedId: String {
-        let id = session.sessionId
-        if id.count > 24 {
-            return String(id.prefix(24)) + "..."
-        }
-        return id
+        .accessibilityValue(displayName)
     }
 }
