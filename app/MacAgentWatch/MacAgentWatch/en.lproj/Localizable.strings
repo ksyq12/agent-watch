@@ -179,6 +179,7 @@
 "menu.monitor" = "Monitor";
 "menu.monitor.start" = "Start Monitoring";
 "menu.monitor.stop" = "Stop Monitoring";
+"menu.monitor.restart" = "Restart Monitoring";
 "menu.monitor.refresh" = "Refresh";
 "menu.view.events" = "Events";
 "menu.view.livelog" = "Live Log";

@@ -223,6 +223,14 @@ final class MonitoringViewModel {
         }
     }
 
+    func restartMonitoring() {
+        if isMonitoring {
+            stopMonitoring()
+            guard !isMonitoring else { return }
+        }
+        startMonitoring()
+    }
+
     func attemptAutoStart() {
         errorMessage = nil
         do {

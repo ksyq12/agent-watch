@@ -492,6 +492,68 @@ final class MonitoringViewModelTests: XCTestCase {
                        "Non-current session should not be active")
     }
 
+    // MARK: - Restart Monitoring
+
+    func testRestartMonitoringStopsAndStartsNewSession() {
+        // Ensure monitoring is active
+        if !viewModel.isMonitoring { viewModel.startMonitoring() }
+        let oldSessionId = viewModel.currentSessionId
+        XCTAssertTrue(viewModel.isMonitoring)
+
+        viewModel.restartMonitoring()
+
+        XCTAssertTrue(viewModel.isMonitoring, "Should be monitoring after restart")
+        XCTAssertNotNil(viewModel.currentSessionId, "Should have a new session ID")
+        XCTAssertNotEqual(viewModel.currentSessionId, oldSessionId,
+                          "Session ID should change after restart")
+        XCTAssertNil(viewModel.errorMessage, "No error should occur on restart")
+        viewModel.stopMonitoring()
+    }
+
+    func testRestartMonitoringWhenNotMonitoring() {
+        // Stop any existing session
+        if viewModel.isMonitoring { viewModel.stopMonitoring() }
+        XCTAssertFalse(viewModel.isMonitoring)
+
+        viewModel.restartMonitoring()
+
+        // Should start monitoring even if not previously monitoring
+        XCTAssertTrue(viewModel.isMonitoring, "Should be monitoring after restart from stopped state")
+        XCTAssertNotNil(viewModel.currentSessionId)
+        viewModel.stopMonitoring()
+    }
+
+    func testRestartMonitoringClearsErrorMessage() {
+        viewModel.startMonitoring()
+        viewModel.errorMessage = "previous error"
+
+        viewModel.restartMonitoring()
+
+        XCTAssertNil(viewModel.errorMessage, "Error message should be cleared after restart")
+        viewModel.stopMonitoring()
+    }
+
+    func testRestartMonitoringCancelsAutoRetry() {
+        viewModel.attemptAutoStart()
+        if viewModel.isWaitingForAgents {
+            viewModel.restartMonitoring()
+            XCTAssertFalse(viewModel.isWaitingForAgents,
+                           "Waiting state should be cleared after restart")
+            if viewModel.isMonitoring { viewModel.stopMonitoring() }
+        }
+    }
+
+    func testRestartMonitoringRefreshesSessions() {
+        viewModel.startMonitoring()
+        let sessionsBeforeRestart = viewModel.sessions.count
+
+        viewModel.restartMonitoring()
+
+        XCTAssertGreaterThanOrEqual(viewModel.sessions.count, sessionsBeforeRestart,
+                                     "Sessions list should be refreshed after restart")
+        viewModel.stopMonitoring()
+    }
+
     // MARK: - Helpers
 
     private func countEvents(at level: RiskLevel) -> Int {

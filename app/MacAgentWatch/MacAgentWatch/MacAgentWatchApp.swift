@@ -28,6 +28,12 @@ struct MacAgentWatchApp: App {
                 .keyboardShortcut(".", modifiers: [.command, .shift])
                 .disabled(!viewModel.isMonitoring)
 
+                Button(String(localized: "menu.monitor.restart")) {
+                    viewModel.restartMonitoring()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!viewModel.isMonitoring)
+
                 Divider()
 
                 Button(String(localized: "menu.monitor.refresh")) {
