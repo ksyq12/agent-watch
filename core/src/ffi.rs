@@ -2,13 +2,19 @@
 //!
 //! Provides FFI-safe types, conversions, and exported functions for the Swift app layer.
 
+use crate::agent_detector::AgentDetector;
 use crate::config::{Config, NotificationConfig};
 use crate::error::CoreError;
 use crate::event::{Event, EventType, FileAction, ProcessAction, RiskLevel, SessionAction};
+use crate::fswatch::{FileSystemWatcher, FsWatchConfig};
+use crate::netmon::{NetMonConfig, NetworkMonitor};
+use crate::process_tracker::{ProcessTracker, TrackerConfig, TrackerEvent};
 use crate::risk::RiskScorer;
-use crate::storage::SessionLogger;
+use crate::storage::{EventStorage, SessionLogger};
 use std::io::BufRead;
-use std::sync::Mutex;
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 
 // ─── FFI Enum Types ───────────────────────────────────────────────────────────
 
@@ -155,6 +161,13 @@ pub struct FfiChartDataPoint {
     pub high: u32,
     pub medium: u32,
     pub low: u32,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FfiDetectedAgent {
+    pub pid: u32,
+    pub name: String,
+    pub path: String,
 }
 
 // ─── FFI Error Type ───────────────────────────────────────────────────────────
@@ -751,7 +764,17 @@ enum SessionState {
 }
 
 struct MonitoringSession {
-    logger: SessionLogger,
+    logger: Arc<Mutex<SessionLogger>>,
+    trackers: Vec<ProcessTracker>,
+    fs_watcher: Option<FileSystemWatcher>,
+    net_monitors: Vec<NetworkMonitor>,
+    writer_thread: Option<JoinHandle<()>>,
+    detected_agents: Vec<FfiDetectedAgent>,
+    /// Sender side of the unified event channel. Held here so we can drop it
+    /// on stop, which causes the writer thread's recv() to return Err and exit.
+    unified_tx: Option<mpsc::Sender<Event>>,
+    /// Handles for forwarding threads (TrackerEvent → Event bridges)
+    forwarding_threads: Vec<JoinHandle<()>>,
 }
 
 #[derive(uniffi::Object)]
@@ -791,6 +814,7 @@ impl FfiMonitoringEngine {
 
         *state = SessionState::Starting;
 
+        // 1. Load config
         let config = Config::load().map_err(|e| {
             *state = SessionState::Idle;
             FfiError::from(e)
@@ -800,6 +824,7 @@ impl FfiMonitoringEngine {
             FfiError::from(e)
         })?;
 
+        // 2. Create SessionLogger
         let mut logger = SessionLogger::new(&log_dir, None).map_err(|e| {
             *state = SessionState::Idle;
             FfiError::Storage {
@@ -817,8 +842,162 @@ impl FfiMonitoringEngine {
             })?;
 
         let session_id = logger.session_id().to_string();
+        let logger = Arc::new(Mutex::new(logger));
 
-        *session = Some(MonitoringSession { logger });
+        // 3. Run AgentDetector
+        let detector = AgentDetector::new();
+        let raw_agents = detector.scan_for_agents();
+        let detected_agents: Vec<FfiDetectedAgent> = raw_agents
+            .iter()
+            .map(|a| FfiDetectedAgent {
+                pid: a.pid,
+                name: a.name.clone(),
+                path: a.path.clone(),
+            })
+            .collect();
+
+        if detected_agents.is_empty() {
+            *state = SessionState::Idle;
+            return Err(FfiError::Other {
+                message: "No AI agents detected. Start an AI agent (Claude, Cursor, Copilot, etc.) before monitoring.".to_string(),
+            });
+        }
+
+        // 4. Create unified event channel
+        let (unified_tx, unified_rx) = mpsc::channel::<Event>();
+
+        // 5. For each detected agent: create ProcessTracker and NetworkMonitor
+        let mut trackers = Vec::new();
+        let mut net_monitors = Vec::new();
+        let mut forwarding_threads = Vec::new();
+
+        for agent in &raw_agents {
+            // ProcessTracker
+            if config.monitoring.track_children {
+                let mut tracker = ProcessTracker::new(TrackerConfig::new(agent.pid).poll_interval(
+                    std::time::Duration::from_millis(config.monitoring.tracking_poll_ms),
+                ));
+                let tracker_rx = tracker.subscribe();
+                tracker.start();
+
+                // Forwarding thread: TrackerEvent → Event
+                let fwd_tx = unified_tx.clone();
+                let agent_name = agent.name.clone();
+                let fwd_handle = thread::spawn(move || {
+                    while let Ok(tracker_event) = tracker_rx.recv() {
+                        let event = match tracker_event {
+                            TrackerEvent::ChildStarted {
+                                pid,
+                                ppid,
+                                name,
+                                risk_level,
+                                ..
+                            } => Event::new(
+                                EventType::Process {
+                                    pid,
+                                    ppid: Some(ppid),
+                                    action: ProcessAction::Start,
+                                },
+                                name,
+                                pid,
+                                risk_level,
+                            ),
+                            TrackerEvent::ChildExited { pid } => Event::new(
+                                EventType::Process {
+                                    pid,
+                                    ppid: None,
+                                    action: ProcessAction::Exit,
+                                },
+                                agent_name.clone(),
+                                pid,
+                                RiskLevel::Low,
+                            ),
+                        };
+                        if fwd_tx.send(event).is_err() {
+                            break;
+                        }
+                    }
+                });
+                forwarding_threads.push(fwd_handle);
+                trackers.push(tracker);
+            }
+
+            // NetworkMonitor
+            if config.monitoring.net_enabled {
+                let mut monitor = NetworkMonitor::new(NetMonConfig::new(agent.pid).poll_interval(
+                    std::time::Duration::from_millis(config.monitoring.net_poll_ms),
+                ));
+                let net_rx = monitor.subscribe();
+                if monitor.start().is_ok() {
+                    let fwd_tx = unified_tx.clone();
+                    let fwd_handle = thread::spawn(move || {
+                        while let Ok(event) = net_rx.recv() {
+                            if fwd_tx.send(event).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    forwarding_threads.push(fwd_handle);
+                    net_monitors.push(monitor);
+                }
+            }
+        }
+
+        // 6. FileSystemWatcher
+        let mut fs_watcher = None;
+        if config.monitoring.fs_enabled {
+            let watch_paths = if config.monitoring.watch_paths.is_empty() {
+                if let Some(home) = dirs::home_dir() {
+                    vec![home]
+                } else {
+                    Vec::new()
+                }
+            } else {
+                config.monitoring.watch_paths.clone()
+            };
+
+            if !watch_paths.is_empty() {
+                let mut watcher = FileSystemWatcher::new(FsWatchConfig::new(watch_paths));
+                let fs_rx = watcher.subscribe();
+                if watcher.start().is_ok() {
+                    let fwd_tx = unified_tx.clone();
+                    let fwd_handle = thread::spawn(move || {
+                        while let Ok(event) = fs_rx.recv() {
+                            if fwd_tx.send(event).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    forwarding_threads.push(fwd_handle);
+                    fs_watcher = Some(watcher);
+                }
+            }
+        }
+
+        // 7. Spawn event writer thread
+        let logger_clone = Arc::clone(&logger);
+        let writer_handle = thread::spawn(move || {
+            while let Ok(event) = unified_rx.recv() {
+                if let Ok(mut l) = logger_clone.lock() {
+                    let _ = l.write_event(&event);
+                }
+            }
+            // Channel closed, flush
+            if let Ok(mut l) = logger_clone.lock() {
+                let _ = l.flush();
+            }
+        });
+
+        *session = Some(MonitoringSession {
+            logger,
+            trackers,
+            fs_watcher,
+            net_monitors,
+            writer_thread: Some(writer_handle),
+            detected_agents,
+            unified_tx: Some(unified_tx),
+            forwarding_threads,
+        });
         *state = SessionState::Active;
 
         Ok(session_id)
@@ -841,12 +1020,52 @@ impl FfiMonitoringEngine {
         *state = SessionState::Stopping;
 
         if let Some(mut s) = session.take() {
-            s.logger.write_session_footer(Some(0)).map_err(|e| {
-                *state = SessionState::Active;
-                FfiError::Storage {
-                    message: format!("Failed to write session footer: {}", e),
+            // 1. Signal all subsystems to stop
+            for tracker in &mut s.trackers {
+                tracker.signal_stop();
+            }
+            if let Some(ref watcher) = s.fs_watcher {
+                watcher.signal_stop();
+            }
+            for monitor in &s.net_monitors {
+                monitor.signal_stop();
+            }
+
+            // 2. Stop and drop all subsystems. Dropping them closes the
+            //    TrackerEvent / Event senders so forwarding threads unblock.
+            for tracker in s.trackers.drain(..) {
+                drop(tracker);
+            }
+            if let Some(watcher) = s.fs_watcher.take() {
+                drop(watcher);
+            }
+            for monitor in s.net_monitors.drain(..) {
+                drop(monitor);
+            }
+
+            // 3. Wait for forwarding threads to finish (they exit once
+            //    the subsystem senders are dropped above)
+            for handle in s.forwarding_threads.drain(..) {
+                let _ = handle.join();
+            }
+
+            // 4. Drop the unified sender so the writer thread exits
+            drop(s.unified_tx.take());
+
+            // 5. Join writer thread
+            if let Some(handle) = s.writer_thread.take() {
+                let _ = handle.join();
+            }
+
+            // 6. Write session footer (best effort — session is already destroyed)
+            if let Ok(mut logger) = s.logger.lock() {
+                if let Err(e) = logger.write_session_footer(Some(0)) {
+                    eprintln!(
+                        "[agent-watch] Warning: Failed to write session footer: {}",
+                        e
+                    );
                 }
-            })?;
+            }
         }
 
         *state = SessionState::Idle;
@@ -862,6 +1081,31 @@ impl FfiMonitoringEngine {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         Ok(guard.0 == SessionState::Active)
+    }
+
+    pub fn get_monitored_agents(&self) -> Result<Vec<FfiDetectedAgent>, FfiError> {
+        let guard = self.state.lock().map_err(|e| FfiError::Other {
+            message: format!(
+                "FfiMonitoringEngine lock poisoned in get_monitored_agents: {}",
+                e
+            ),
+        })?;
+
+        let (ref current_state, ref session) = *guard;
+
+        if *current_state != SessionState::Active {
+            return Err(FfiError::Other {
+                message: format!(
+                    "Cannot get monitored agents: engine is in {:?} state",
+                    current_state
+                ),
+            });
+        }
+
+        match session {
+            Some(s) => Ok(s.detected_agents.clone()),
+            None => Ok(Vec::new()),
+        }
     }
 }
 
@@ -1727,5 +1971,83 @@ mod tests {
         assert_eq!(reloaded.notifications.min_risk_level, "critical");
         assert!(!reloaded.notifications.sound_enabled);
         assert!(!reloaded.notifications.badge_enabled);
+    }
+
+    // ─── Tests for v0.5.2: enhanced monitoring engine ─────────────────────────
+
+    #[test]
+    fn test_start_session_with_monitoring() {
+        let engine = FfiMonitoringEngine::new();
+        assert!(!engine.is_active().unwrap());
+
+        let result = engine.start_session("test-agent".to_string());
+        assert!(result.is_ok());
+        let session_id = result.unwrap();
+        assert!(!session_id.is_empty());
+        assert!(engine.is_active().unwrap());
+
+        // Clean up
+        engine.stop_session().unwrap();
+        assert!(!engine.is_active().unwrap());
+    }
+
+    #[test]
+    fn test_stop_session_cleanup() {
+        let engine = FfiMonitoringEngine::new();
+
+        // Start a session
+        let session_id = engine.start_session("test-cleanup".to_string()).unwrap();
+        assert!(!session_id.is_empty());
+        assert!(engine.is_active().unwrap());
+
+        // Stop should clean up all subsystems
+        let stop_result = engine.stop_session();
+        assert!(stop_result.is_ok());
+        assert!(!engine.is_active().unwrap());
+
+        // Double stop should fail gracefully
+        let second_stop = engine.stop_session();
+        assert!(second_stop.is_err());
+    }
+
+    #[test]
+    fn test_get_monitored_agents() {
+        let engine = FfiMonitoringEngine::new();
+
+        // Before start, should error
+        let result = engine.get_monitored_agents();
+        assert!(result.is_err());
+
+        // Start session
+        engine.start_session("test-agents".to_string()).unwrap();
+
+        // Should return a list (may be empty if no agents are running)
+        let agents = engine.get_monitored_agents().unwrap();
+        // Just verify it returns a Vec
+        let _ = agents.len();
+
+        // Clean up
+        engine.stop_session().unwrap();
+
+        // After stop, should error again
+        let result = engine.get_monitored_agents();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ffi_detected_agent_fields() {
+        let agent = FfiDetectedAgent {
+            pid: 999,
+            name: "test-agent".to_string(),
+            path: "/usr/bin/test-agent".to_string(),
+        };
+        assert_eq!(agent.pid, 999);
+        assert_eq!(agent.name, "test-agent");
+        assert_eq!(agent.path, "/usr/bin/test-agent");
+
+        // Test clone
+        let cloned = agent.clone();
+        assert_eq!(cloned.pid, agent.pid);
+        assert_eq!(cloned.name, agent.name);
     }
 }

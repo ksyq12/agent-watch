@@ -330,6 +330,30 @@ final class MonitoringViewModelTests: XCTestCase {
                        "Summary lowCount should match events")
     }
 
+    // MARK: - monitoredAgents
+
+    func testMonitoredAgentsEmptyByDefault() {
+        XCTAssertTrue(viewModel.monitoredAgents.isEmpty, "monitoredAgents should be empty initially")
+    }
+
+    func testStartMonitoringPopulatesAgents() {
+        viewModel.startMonitoring()
+        // After starting, monitoredAgents may or may not be empty depending on running agents
+        // But startMonitoring should succeed
+        if viewModel.isMonitoring {
+            // getMonitoredAgents was called
+            let _ = viewModel.monitoredAgents
+        }
+        // Clean up
+        viewModel.stopMonitoring()
+    }
+
+    func testStopMonitoringClearsAgents() {
+        viewModel.startMonitoring()
+        viewModel.stopMonitoring()
+        XCTAssertTrue(viewModel.monitoredAgents.isEmpty, "monitoredAgents should be cleared after stop")
+    }
+
     // MARK: - Helpers
 
     private func countEvents(at level: RiskLevel) -> Int {

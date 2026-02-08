@@ -24,6 +24,7 @@ final class MonitoringViewModel {
     var currentSessionId: String?
     var errorMessage: String?
     var chartData: [ChartDataPoint] = []
+    var monitoredAgents: [FfiDetectedAgent] = []
     var liveEventIndex: UInt32 = 0
     var selectedTab: DetailTab = .events
     var isSearchFocused: Bool = false
@@ -146,6 +147,9 @@ final class MonitoringViewModel {
         applyNotificationConfig()
         sessions = bridge.listSessionLogs()
         isMonitoring = bridge.isEngineActive()
+        if isMonitoring {
+            monitoredAgents = bridge.getMonitoredAgents()
+        }
 
         if let latestSession = sessions.first {
             events = bridge.readSessionLog(path: latestSession.filePath)
@@ -185,12 +189,18 @@ final class MonitoringViewModel {
 
     func startMonitoring() {
         errorMessage = nil
-        if let sessionId = bridge.startSession(processName: "MacAgentWatch") {
+        do {
+            let sessionId = try bridge.startSession(processName: "MacAgentWatch")
             currentSessionId = sessionId
             isMonitoring = true
+            monitoredAgents = bridge.getMonitoredAgents()
             sessions = bridge.listSessionLogs()
-        } else {
-            errorMessage = "Failed to start monitoring session"
+            // Load the new session
+            if let newSession = sessions.first {
+                loadSession(newSession)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -199,6 +209,7 @@ final class MonitoringViewModel {
         if bridge.stopSession() {
             isMonitoring = false
             currentSessionId = nil
+            monitoredAgents = []
             sessions = bridge.listSessionLogs()
         } else {
             errorMessage = "Failed to stop monitoring session"

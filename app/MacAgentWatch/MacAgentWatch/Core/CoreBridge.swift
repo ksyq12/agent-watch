@@ -1,5 +1,16 @@
 import Foundation
 
+enum CoreBridgeError: LocalizedError {
+    case engineInitFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .engineInitFailed:
+            return "Failed to initialize monitoring engine"
+        }
+    }
+}
+
 @MainActor
 final class CoreBridge {
     static let shared = CoreBridge()
@@ -149,19 +160,12 @@ final class CoreBridge {
 
     // MARK: - Monitoring Engine Management
 
-    func startSession(processName: String) -> String? {
-        do {
-            if engine == nil { engine = FfiMonitoringEngine() }
-            guard let engine = engine else {
-                print("[CoreBridge] Warning: engine failed to initialize")
-                return nil
-            }
-            let sessionId = try engine.startSession(processName: processName)
-            return sessionId
-        } catch {
-            print("[CoreBridge] Warning: FFI startSession failed: \(error)")
-            return nil
+    func startSession(processName: String) throws -> String {
+        if engine == nil { engine = FfiMonitoringEngine() }
+        guard let engine = engine else {
+            throw CoreBridgeError.engineInitFailed
         }
+        return try engine.startSession(processName: processName)
     }
 
     func stopSession() -> Bool {
@@ -179,6 +183,16 @@ final class CoreBridge {
             return try engine?.isActive() ?? false
         } catch {
             return false
+        }
+    }
+
+    func getMonitoredAgents() -> [FfiDetectedAgent] {
+        do {
+            guard let engine = engine else { return [] }
+            return try engine.getMonitoredAgents()
+        } catch {
+            print("[CoreBridge] Warning: FFI getMonitoredAgents failed: \(error)")
+            return []
         }
     }
 

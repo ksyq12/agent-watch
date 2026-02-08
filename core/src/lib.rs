@@ -21,6 +21,7 @@
 //! let exit_code = wrapper.run_simple().expect("Failed to run");
 //! ```
 
+pub mod agent_detector;
 pub mod config;
 pub mod detector;
 pub mod error;
@@ -40,6 +41,7 @@ pub mod wrapper;
 uniffi::setup_scaffolding!();
 
 // Re-export commonly used types
+pub use agent_detector::{AgentDetector, DetectedAgent};
 pub use config::{
     AlertConfig, Config, GeneralConfig, LoggingConfig, MonitoringConfig, NotificationConfig,
     StorageBackend,
