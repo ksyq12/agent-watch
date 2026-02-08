@@ -8,6 +8,8 @@ struct FilterBarView: View {
     @Binding var customStartDate: Date?
     @Binding var customEndDate: Date?
     let filteredCount: Int
+    let isChartFilterActive: Bool
+    let onClearChartFilter: () -> Void
 
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .caption) private var chipHorizontalPadding: CGFloat = 10
@@ -18,6 +20,41 @@ struct FilterBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Chart filter badge (only shown when chart filter is active)
+            if isChartFilterActive {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .foregroundStyle(.blue)
+                        .font(.caption)
+                    Text(String(localized: "filter.chart.applied"))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.blue)
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            onClearChartFilter()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                            Text(String(localized: "filter.chart.clear"))
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "filter.chart.clear"))
+                    .accessibilityHint(String(localized: "a11y.filter.chart.clear.hint"))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityLabel(String(localized: "a11y.filter.chart.badge"))
+            }
+
             // Top row: search bar + date range picker
             HStack(spacing: 12) {
                 searchBar

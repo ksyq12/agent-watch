@@ -30,6 +30,10 @@ final class MonitoringViewModel {
     var isSearchFocused: Bool = false
     var isWaitingForAgents: Bool = false
     var sessionEventCounts: [String: Int] = [:]
+    var isChartFilterActive: Bool = false
+    var selectedTimelineBucket: Date? = nil
+    var selectedRiskSector: RiskLevel? = nil
+    var selectedEventTypeBar: EventTypeFilter? = nil
     private var autoRetryTimer: Timer?
 
     var selectedTheme: AppThemeMode {
@@ -167,6 +171,39 @@ final class MonitoringViewModel {
         activitySummary = bridge.getActivitySummary(events: events)
         recentAlerts = events.filter { $0.alert }.prefix(5).map { $0 }
         loadChartData()
+    }
+
+    // MARK: - Chart Filter (안건 2)
+
+    func applyChartFilter(timeRange: ClosedRange<Date>? = nil, riskLevel: RiskLevel? = nil, eventType: EventTypeFilter? = nil) {
+        selectedTab = .events
+        isChartFilterActive = true
+
+        if let timeRange {
+            dateRangePreset = .custom
+            customStartDate = timeRange.lowerBound
+            customEndDate = timeRange.upperBound
+        }
+
+        if let riskLevel {
+            filterRiskLevel = riskLevel
+        }
+
+        if let eventType {
+            eventTypeFilter = eventType
+        }
+    }
+
+    func clearChartFilter() {
+        isChartFilterActive = false
+        filterRiskLevel = nil
+        eventTypeFilter = .all
+        dateRangePreset = .allTime
+        customStartDate = nil
+        customEndDate = nil
+        selectedTimelineBucket = nil
+        selectedRiskSector = nil
+        selectedEventTypeBar = nil
     }
 
     func loadChartData(bucketMinutes: UInt32 = 60) {

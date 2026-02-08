@@ -142,6 +142,26 @@
 "a11y.charts.risk.distribution" = "Donut chart showing distribution of events by risk level";
 "a11y.charts.event.types" = "Bar chart showing count of events by type";
 
+// MARK: - Chart Drill-Down Filter
+"filter.chart.applied" = "Filtered from Chart";
+"filter.chart.clear" = "Clear Chart Filter";
+
+// MARK: - Chart Tooltips
+"charts.tooltip.time" = "Time";
+"charts.tooltip.total" = "Total";
+"charts.tooltip.tap.hint" = "Tap to filter events";
+"charts.tooltip.risk.critical" = "Critical";
+"charts.tooltip.risk.high" = "High";
+"charts.tooltip.risk.medium" = "Medium";
+"charts.tooltip.risk.low" = "Low";
+
+// MARK: - Chart Drill-Down Accessibility
+"a11y.filter.chart.badge" = "Chart filter is active";
+"a11y.filter.chart.clear.hint" = "Double tap to clear chart filter and show all events";
+"a11y.charts.timeline.tap.hint" = "Tap a bar to filter events by that time period";
+"a11y.charts.risk.tap.hint" = "Tap a sector to filter events by that risk level";
+"a11y.charts.eventType.tap.hint" = "Tap a bar to filter events by that event type";
+
 // MARK: - Event Detail View
 "detail.section.event" = "Event Details";
 "detail.section.command" = "Command Details";
@@ -280,3 +300,19 @@
 
 // MARK: - Error Banner
 "error.dismiss" = "Dismiss error";
+
+// MARK: - Chart Drill-Down (안건 2)
+"filter.chart.applied" = "Filtered from Chart";
+"filter.chart.clear" = "Clear Chart Filter";
+"charts.tooltip.time" = "Time";
+"charts.tooltip.total" = "Total";
+"charts.tooltip.tap.hint" = "Tap to filter events";
+"charts.tooltip.risk.critical" = "Critical";
+"charts.tooltip.risk.high" = "High";
+"charts.tooltip.risk.medium" = "Medium";
+"charts.tooltip.risk.low" = "Low";
+"a11y.filter.chart.badge" = "Chart filter is active";
+"a11y.filter.chart.clear.hint" = "Double tap to clear chart filter and show all events";
+"a11y.charts.timeline.tap.hint" = "Tap a bar to filter events by that time period";
+"a11y.charts.risk.tap.hint" = "Tap a sector to filter events by risk level";
+"a11y.charts.eventType.tap.hint" = "Tap a bar to filter events by event type";

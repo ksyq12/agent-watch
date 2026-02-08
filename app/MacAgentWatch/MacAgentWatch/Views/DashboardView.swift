@@ -172,7 +172,9 @@ struct DashboardView: View {
                 dateRangePreset: $viewModel.dateRangePreset,
                 customStartDate: $viewModel.customStartDate,
                 customEndDate: $viewModel.customEndDate,
-                filteredCount: viewModel.filteredEvents.count
+                filteredCount: viewModel.filteredEvents.count,
+                isChartFilterActive: viewModel.isChartFilterActive,
+                onClearChartFilter: { viewModel.clearChartFilter() }
             )
             .padding(.horizontal)
             .padding(.vertical, 8)

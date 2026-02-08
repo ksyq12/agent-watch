@@ -562,4 +562,108 @@ final class MonitoringViewModelTests: XCTestCase {
         viewModel.filterRiskLevel = nil
         return count
     }
+
+    // MARK: - Chart Filter (안건 2)
+
+    func testApplyChartFilterSwitchesToEventsTab() {
+        viewModel.selectedTab = .charts
+        viewModel.applyChartFilter()
+        XCTAssertEqual(viewModel.selectedTab, .events,
+                       "applyChartFilter should switch to events tab")
+    }
+
+    func testApplyChartFilterWithTimeRange() {
+        let start = Date().addingTimeInterval(-3600)
+        let end = Date()
+        viewModel.applyChartFilter(timeRange: start...end)
+        XCTAssertEqual(viewModel.dateRangePreset, .custom,
+                       "Should set date range to custom")
+        XCTAssertEqual(viewModel.customStartDate, start,
+                       "Should set customStartDate to range lower bound")
+        XCTAssertEqual(viewModel.customEndDate, end,
+                       "Should set customEndDate to range upper bound")
+    }
+
+    func testApplyChartFilterWithRiskLevel() {
+        viewModel.applyChartFilter(riskLevel: .critical)
+        XCTAssertEqual(viewModel.filterRiskLevel, .critical,
+                       "Should set filterRiskLevel to the specified level")
+    }
+
+    func testApplyChartFilterWithEventType() {
+        viewModel.applyChartFilter(eventType: .network)
+        XCTAssertEqual(viewModel.eventTypeFilter, .network,
+                       "Should set eventTypeFilter to the specified type")
+    }
+
+    func testApplyChartFilterCombined() {
+        let start = Date().addingTimeInterval(-7200)
+        let end = Date()
+        viewModel.applyChartFilter(timeRange: start...end, riskLevel: .high, eventType: .command)
+        XCTAssertEqual(viewModel.selectedTab, .events)
+        XCTAssertEqual(viewModel.dateRangePreset, .custom)
+        XCTAssertEqual(viewModel.filterRiskLevel, .high)
+        XCTAssertEqual(viewModel.eventTypeFilter, .command)
+    }
+
+    func testApplyChartFilterWithNilParametersKeepsExisting() {
+        viewModel.filterRiskLevel = .medium
+        viewModel.eventTypeFilter = .fileAccess
+        viewModel.applyChartFilter()
+        XCTAssertEqual(viewModel.filterRiskLevel, .medium,
+                       "Nil riskLevel should not change existing filter")
+        XCTAssertEqual(viewModel.eventTypeFilter, .fileAccess,
+                       "Nil eventType should not change existing filter")
+    }
+
+    func testApplyChartFilterSetsIsChartFilterActive() {
+        XCTAssertFalse(viewModel.isChartFilterActive)
+        viewModel.applyChartFilter(riskLevel: .high)
+        XCTAssertTrue(viewModel.isChartFilterActive,
+                      "Should set isChartFilterActive to true")
+    }
+
+    func testClearChartFilterResetsAllFilters() {
+        viewModel.applyChartFilter(timeRange: Date()...Date(), riskLevel: .critical, eventType: .network)
+        viewModel.clearChartFilter()
+        XCTAssertFalse(viewModel.isChartFilterActive)
+        XCTAssertNil(viewModel.filterRiskLevel)
+        XCTAssertEqual(viewModel.eventTypeFilter, .all)
+        XCTAssertEqual(viewModel.dateRangePreset, .allTime)
+        XCTAssertNil(viewModel.customStartDate)
+        XCTAssertNil(viewModel.customEndDate)
+    }
+
+    func testClearChartFilterResetsChartSelectionState() {
+        viewModel.selectedTimelineBucket = Date()
+        viewModel.selectedRiskSector = .high
+        viewModel.selectedEventTypeBar = .command
+        viewModel.clearChartFilter()
+        XCTAssertNil(viewModel.selectedTimelineBucket,
+                     "Should clear timeline selection")
+        XCTAssertNil(viewModel.selectedRiskSector,
+                     "Should clear risk sector selection")
+        XCTAssertNil(viewModel.selectedEventTypeBar,
+                     "Should clear event type bar selection")
+    }
+
+    func testIsChartFilterActiveInitiallyFalse() {
+        XCTAssertFalse(viewModel.isChartFilterActive,
+                       "isChartFilterActive should be false initially")
+    }
+
+    func testSelectedTimelineBucketInitiallyNil() {
+        XCTAssertNil(viewModel.selectedTimelineBucket,
+                     "selectedTimelineBucket should be nil initially")
+    }
+
+    func testSelectedRiskSectorInitiallyNil() {
+        XCTAssertNil(viewModel.selectedRiskSector,
+                     "selectedRiskSector should be nil initially")
+    }
+
+    func testSelectedEventTypeBarInitiallyNil() {
+        XCTAssertNil(viewModel.selectedEventTypeBar,
+                     "selectedEventTypeBar should be nil initially")
+    }
 }
