@@ -164,7 +164,7 @@ struct MenuBarView: View {
     // MARK: - Actions
 
     private var actionsSection: some View {
-        VStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             if viewModel.isWaitingForAgents {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -175,6 +175,14 @@ struct MenuBarView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if viewModel.isMonitoring {
+                Button {
+                    viewModel.restartMonitoring()
+                } label: {
+                    Label(String(localized: "menubar.restart.monitoring"), systemImage: "arrow.clockwise.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless)
+
                 Button {
                     viewModel.stopMonitoring()
                 } label: {

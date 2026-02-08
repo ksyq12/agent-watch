@@ -269,6 +269,7 @@
 "menubar.scanning" = "Scanning for agents...";
 "menubar.start.monitoring" = "Start Monitoring";
 "menubar.stop.monitoring" = "Stop Monitoring";
+"menubar.restart.monitoring" = "Restart Monitoring";
 
 // MARK: - Error Banner
 "error.dismiss" = "Dismiss error";
